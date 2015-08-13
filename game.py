@@ -5,7 +5,7 @@ import os,socket,threading,time
 #import traceback
 
 allow_delete = False
-local_ip = socket.gethostbyname(socket.gethostname())
+local_ip = '127.0.0.1'
 local_port = 21
 currdir=os.path.abspath('.')
 
