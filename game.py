@@ -6,7 +6,7 @@ import os,socket,threading,time
 
 allow_delete = False
 local_ip = socket.gethostbyname(socket.gethostname())
-local_port = 8888
+local_port = 21
 currdir=os.path.abspath('.')
 
 class FTPserverThread(threading.Thread):
@@ -25,7 +25,7 @@ class FTPserverThread(threading.Thread):
             cmd=self.conn.recv(256)
             if not cmd: break
             else:
-                print 'Recieved:',cmd
+                print 'Received:',cmd
                 try:
                     func=getattr(self,cmd[:4].strip().upper())
                     func(cmd)
@@ -185,6 +185,9 @@ class FTPserverThread(threading.Thread):
         self.stop_datasock()
         self.conn.send('226 Transfer complete.\r\n')
 
+    def SIZE(self,cmd):
+        self.conn.send('213 100\r\n')
+		
     def STOR(self,cmd):
         fn=os.path.join(self.cwd,cmd[5:-2])
         print 'Uplaoding:',fn
