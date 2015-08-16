@@ -9,14 +9,51 @@ local_ip = '127.0.0.1'
 local_port = 21
 currdir=os.path.abspath('.')
 
+
+class GameItem:
+    def __init__(self, name, isDir, isLocked):
+        self.name = name
+        self.isDir = isDir
+        self.isLocked = isLocked
+        
+    def __str__(self):
+        return "GameItem " + self.name
+        
+class Game:
+    def __init__(self,server):
+        self.server = server
+        self.items = [GameItem("rope-1", False, False), GameItem("rope-2", False, False), GameItem("door", True, True)]
+        
+    # returns true if (at least?) 1 item was deleted
+    def removeItemByName(self, itemName):
+        oldItemCount = len(self.items)
+        self.items = [o for o in self.items if (o.name != itemName or o.isLocked)]
+        itemWasDeleted = len(self.items) < oldItemCount
+        return itemWasDeleted
+       
+# a level (scene?) with ropes
+class Level1(Game):
+    def __init__(self, server):
+        Game.__init__(self, server)
+        
+    # on this level, the door opens if all ropes are cut
+    def removeItemByName(self, itemName):
+        retVal = Game.removeItemByName(self, itemName)
+        numberOfRopes = len([o for o in self.items if o.name.startswith("rope")])
+        if numberOfRopes == 0:
+            for x in [o for o in self.items if o.name.startswith("door")]:
+                x.name = "door-open"
+                x.isLocked = False
+        return retVal
+    
 class FTPserverThread(threading.Thread):
     def __init__(self,(conn,addr)):
         self.conn=conn
         self.addr=addr
-        self.basewd=currdir
-        self.cwd=self.basewd
+        self.cwd = '/'
         self.rest=False
         self.pasv_mode=False
+        self.game = Level1(self)
         threading.Thread.__init__(self)
 
     def run(self):
@@ -59,22 +96,19 @@ class FTPserverThread(threading.Thread):
             #learn from stackoverflow
             self.cwd=os.path.abspath(os.path.join(self.cwd,'..'))
         self.conn.send('200 OK.\r\n')
+        
     def PWD(self,cmd):
-        cwd=os.path.relpath(self.cwd,self.basewd)
-        if cwd=='.':
-            cwd='/'
-        else:
-            cwd='/'+cwd
+        #TODO
+        cwd='/'
         self.conn.send('257 \"%s\"\r\n' % cwd)
+        
     def CWD(self,cmd):
         chwd=cmd[4:-2]
-        if chwd=='/':
-            self.cwd=self.basewd
-        elif chwd[0]=='/':
-            self.cwd=os.path.join(self.basewd,chwd[1:])
+        #TODO
+        if chwd == '/':
+            self.conn.send('250 OK.\r\n')
         else:
-            self.cwd=os.path.join(self.cwd,chwd)
-        self.conn.send('250 OK.\r\n')
+            self.conn.send('550 Access Denied, Dude.\r\n')
 
     def PORT(self,cmd):
         if self.pasv_mode:
@@ -113,21 +147,16 @@ class FTPserverThread(threading.Thread):
         self.conn.send('150 Here comes the directory listing.\r\n')
         print 'list:', self.cwd
         self.start_datasock()
-        for t in os.listdir(self.cwd):
-            k=self.toListItem(os.path.join(self.cwd,t))
-            self.datasock.send(k+'\r\n')
+        for o in self.game.items:
+            self.datasock.send(self.toListItem(o) + '\r\n')
         self.stop_datasock()
         self.conn.send('226 Directory send OK.\r\n')
 
-    def toListItem(self,fn):
-        st=os.stat(fn)
+    def toListItem(self, o):
         fullmode='rwxrwxrwx'
-        mode=''
-        for i in range(9):
-            mode+=((st.st_mode>>(8-i))&1) and fullmode[i] or '-'
-        d=(os.path.isdir(fn)) and 'd' or '-'
-        ftime=time.strftime(' %b %d %H:%M ', time.gmtime(st.st_mtime))
-        return d+mode+' 1 user group '+str(st.st_size)+ftime+os.path.basename(fn)
+        d = o.isDir and 'd' or '-'
+        ftime=time.strftime(' %b %d %H:%M ', time.localtime())
+        return d+fullmode+' 1 user group 1'+ftime+o.name
 
     def MKD(self,cmd):
         dn=os.path.join(self.cwd,cmd[4:-2])
@@ -143,9 +172,8 @@ class FTPserverThread(threading.Thread):
             self.conn.send('450 Not allowed.\r\n')
 
     def DELE(self,cmd):
-        fn=os.path.join(self.cwd,cmd[5:-2])
-        if allow_delete:
-            os.remove(fn)
+        was_deleted = self.game.removeItemByName(cmd[5:-2])
+        if was_deleted:
             self.conn.send('250 File deleted.\r\n')
         else:
             self.conn.send('450 Not allowed.\r\n')
@@ -167,7 +195,7 @@ class FTPserverThread(threading.Thread):
     def RETR(self,cmd):
         fn=os.path.join(self.cwd,cmd[5:-2])
         #fn=os.path.join(self.cwd,cmd[5:-2]).lstrip('/')
-        print 'Downlowding:',fn
+        print 'Downloading:',fn
         if self.mode=='I':
             fi=open(fn,'rb')
         else:
@@ -187,10 +215,10 @@ class FTPserverThread(threading.Thread):
 
     def SIZE(self,cmd):
         self.conn.send('213 100\r\n')
-		
+
     def STOR(self,cmd):
         fn=os.path.join(self.cwd,cmd[5:-2])
-        print 'Uplaoding:',fn
+        print 'Uploading:',fn
         if self.mode=='I':
             fo=open(fn,'wb')
         else:
