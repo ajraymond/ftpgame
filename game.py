@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os,socket,threading,time
+import re
 #import traceback
 
 allow_delete = False
@@ -11,10 +12,11 @@ currdir=os.path.abspath('.')
 
 
 class GameItem:
-    def __init__(self, name, isDir, isLocked):
+    def __init__(self, name, isDir, isLocked, contains):
         self.name = name
         self.isDir = isDir
         self.isLocked = isLocked
+        self.contains = contains
         
     def __str__(self):
         return "GameItem " + self.name
@@ -22,7 +24,7 @@ class GameItem:
 class Game:
     def __init__(self,server):
         self.server = server
-        self.items = [GameItem("rope-1", False, False), GameItem("rope-2", False, False), GameItem("door", True, True)]
+        self.items = []
         
     # returns true if (at least?) 1 item was deleted
     def removeItemByName(self, itemName):
@@ -32,9 +34,12 @@ class Game:
         return itemWasDeleted
        
 # a level (scene?) with ropes
-class Level1(Game):
+class Level0(Game):
     def __init__(self, server):
         Game.__init__(self, server)
+        self.items = [ GameItem("rope-1", False, False, []),
+                       GameItem("rope-2", False, False, []),
+                       GameItem("door", True, True, []) ]
         
     # on this level, the door opens if all ropes are cut
     def removeItemByName(self, itemName):
@@ -46,6 +51,23 @@ class Level1(Game):
                 x.isLocked = False
         return retVal
     
+class Level1(Game):
+    def __init__(self, server):
+        Game.__init__(self, server)
+        self.items = [ GameItem("folder", True, True, []) ]
+
+class Level2(Game):
+    def __init__(self, server):
+        Game.__init__(self, server)
+
+class Level3(Game):
+    def __init__(self, server):
+        Game.__init__(self, server)
+
+class Level4(Game):
+    def __init__(self, server):
+        Game.__init__(self, server)
+    
 class FTPserverThread(threading.Thread):
     def __init__(self,(conn,addr)):
         self.conn=conn
@@ -53,7 +75,10 @@ class FTPserverThread(threading.Thread):
         self.cwd = '/'
         self.rest=False
         self.pasv_mode=False
-        self.game = Level1(self)
+        self.NUM_LEVELS = 4
+        self.game = []
+        for i in range(self.NUM_LEVELS):
+            self.game.append(globals()['Level' + str(i)](self)) #pffft
         threading.Thread.__init__(self)
 
     def run(self):
@@ -104,9 +129,13 @@ class FTPserverThread(threading.Thread):
         
     def CWD(self,cmd):
         chwd=cmd[4:-2]
-        #TODO
+        m = re.search('/(\d+)/?(.*)', chwd)
         if chwd == '/':
             self.conn.send('250 OK.\r\n')
+            self.cwd = chwd
+        elif not m is None:
+            self.conn.send('250 OK.\r\n')
+            self.cwd = '/'+m.group(1)+'/'
         else:
             self.conn.send('550 Access Denied, Dude.\r\n')
 
@@ -145,10 +174,14 @@ class FTPserverThread(threading.Thread):
 
     def LIST(self,cmd):
         self.conn.send('150 Here comes the directory listing.\r\n')
-        print 'list:', self.cwd
         self.start_datasock()
-        for o in self.game.items:
-            self.datasock.send(self.toListItem(o) + '\r\n')
+        if self.cwd == '/':
+            for i in range(self.NUM_LEVELS):
+                self.datasock.send('drwxrwxrwx 1 user group 1'+time.strftime(' %b %d %H:%M ', time.localtime())+str(i)+'\r\n')
+        else:
+            m = re.search('^/(\d+)/?(.*)', self.cwd)
+            for o in self.game[int(m.group(1))].items:
+                self.datasock.send(self.toListItem(o) + '\r\n')
         self.stop_datasock()
         self.conn.send('226 Directory send OK.\r\n')
 
@@ -172,7 +205,13 @@ class FTPserverThread(threading.Thread):
             self.conn.send('450 Not allowed.\r\n')
 
     def DELE(self,cmd):
-        was_deleted = self.game.removeItemByName(cmd[5:-2])
+        was_deleted = False
+        
+        filePath = cmd[5:-2]
+        m = re.search('/(\d+)/?(.*)', filePath)
+        if not m is None:
+            was_deleted = self.game[int(m.group(1))].removeItemByName(m.group(2))
+        
         if was_deleted:
             self.conn.send('250 File deleted.\r\n')
         else:
