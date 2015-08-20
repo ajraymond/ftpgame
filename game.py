@@ -12,18 +12,18 @@ currdir=os.path.abspath('.')
 
 
 class GameItem:
-    def __init__(self, name, isDir, isLocked, contains):
+    def __init__(self, name, isDir, isLocked, contains, data):
         self.name = name
         self.isDir = isDir
         self.isLocked = isLocked
         self.contains = contains
+        self.data = data
         
     def __str__(self):
         return "GameItem " + self.name
         
 class Game:
-    def __init__(self,server):
-        self.server = server
+    def __init__(self):
         self.items = []
         
     # returns true if (at least?) 1 item was deleted
@@ -33,13 +33,17 @@ class Game:
         itemWasDeleted = len(self.items) < oldItemCount
         return itemWasDeleted
        
+    def getDataByName(self, itemName):
+        myItem = [o for o in self.items if (o.name == itemName)]
+        return myItem[0].data
+       
 # a level (scene?) with ropes
 class Level0(Game):
-    def __init__(self, server):
-        Game.__init__(self, server)
-        self.items = [ GameItem("rope-1", False, False, []),
-                       GameItem("rope-2", False, False, []),
-                       GameItem("door", True, True, []) ]
+    def __init__(self):
+        Game.__init__(self)
+        self.items = [ GameItem("rope-1", False, False, [], 'rope1'),  
+                       GameItem("rope-2", False, False, [], 'rope2'),
+                       GameItem("door", True, True, [], '') ]
         
     # on this level, the door opens if all ropes are cut
     def removeItemByName(self, itemName):
@@ -50,24 +54,33 @@ class Level0(Game):
                 x.name = "door-open"
                 x.isLocked = False
         return retVal
+                
     
 class Level1(Game):
-    def __init__(self, server):
-        Game.__init__(self, server)
-        self.items = [ GameItem("folder", True, True, []) ]
+    def __init__(self):
+        Game.__init__(self)
+        self.items = [ GameItem("folder", True, True, [], '') ]
 
 class Level2(Game):
-    def __init__(self, server):
-        Game.__init__(self, server)
+    def __init__(self):
+        Game.__init__(self)
 
 class Level3(Game):
-    def __init__(self, server):
-        Game.__init__(self, server)
+    def __init__(self):
+        Game.__init__(self)
 
 class Level4(Game):
-    def __init__(self, server):
-        Game.__init__(self, server)
-    
+    def __init__(self):
+        Game.__init__(self)
+
+class GameState():
+    def __init__(self):
+        self.NUM_LEVELS = 4
+        self.levels = []
+        for i in range(self.NUM_LEVELS):
+            self.levels.append(globals()['Level' + str(i)]()) #pffft
+gameState = GameState()
+            
 class FTPserverThread(threading.Thread):
     def __init__(self,(conn,addr)):
         self.conn=conn
@@ -75,10 +88,7 @@ class FTPserverThread(threading.Thread):
         self.cwd = '/'
         self.rest=False
         self.pasv_mode=False
-        self.NUM_LEVELS = 4
-        self.game = []
-        for i in range(self.NUM_LEVELS):
-            self.game.append(globals()['Level' + str(i)](self)) #pffft
+        self.game = gameState.levels
         threading.Thread.__init__(self)
 
     def run(self):
@@ -174,9 +184,9 @@ class FTPserverThread(threading.Thread):
 
     def LIST(self,cmd):
         self.conn.send('150 Here comes the directory listing.\r\n')
-        self.start_datasock()
+        self.start_datasock()   
         if self.cwd == '/':
-            for i in range(self.NUM_LEVELS):
+            for i in range(len(self.game)):
                 self.datasock.send('drwxrwxrwx 1 user group 1'+time.strftime(' %b %d %H:%M ', time.localtime())+str(i)+'\r\n')
         else:
             m = re.search('^/(\d+)/?(.*)', self.cwd)
@@ -189,7 +199,7 @@ class FTPserverThread(threading.Thread):
         fullmode='rwxrwxrwx'
         d = o.isDir and 'd' or '-'
         ftime=time.strftime(' %b %d %H:%M ', time.localtime())
-        return d+fullmode+' 1 user group 1'+ftime+o.name
+        return d+fullmode+' 1 user group '+str(len(o.data))+' '+ftime+o.name
 
     def MKD(self,cmd):
         dn=os.path.join(self.cwd,cmd[4:-2])
@@ -232,44 +242,51 @@ class FTPserverThread(threading.Thread):
         self.conn.send('250 File position reseted.\r\n')
 
     def RETR(self,cmd):
-        fn=os.path.join(self.cwd,cmd[5:-2])
-        #fn=os.path.join(self.cwd,cmd[5:-2]).lstrip('/')
-        print 'Downloading:',fn
-        if self.mode=='I':
-            fi=open(fn,'rb')
-        else:
-            fi=open(fn,'r')
+        filePath = cmd[5:-2]
+        print 'Downloading:' + filePath
+        #TODO check if we're in binary mode with self.mode=='I':
         self.conn.send('150 Opening data connection.\r\n')
-        if self.rest:
-            fi.seek(self.pos)
-            self.rest=False
-        data= fi.read(1024)
+        #TODO check if RESTore mode? unsure
+        #TODO break down into pieces, like 1024 bytes...
+        data = ''
+        m = re.search('/(\d+)/?(.*)', filePath)
+        if not m is None:
+            data = self.game[int(m.group(1))].getDataByName(m.group(2))
         self.start_datasock()
-        while data:
-            self.datasock.send(data)
-            data=fi.read(1024)
-        fi.close()
+        try:
+            sent = self.datasock.sendall(data)
+        except socket.error:
+            print 'Send failed: ' + sent
         self.stop_datasock()
         self.conn.send('226 Transfer complete.\r\n')
 
     def SIZE(self,cmd):
         self.conn.send('213 100\r\n')
 
+    def ABOR(self,cmd):
+        self.conn.send('426 Never gonna give you up.\r\n')
+
+    def SITE(self, cmd):
+        self.conn.send('200 OK whatever man.\r\n')
+        
     def STOR(self,cmd):
-        fn=os.path.join(self.cwd,cmd[5:-2])
-        print 'Uploading:',fn
-        if self.mode=='I':
-            fo=open(fn,'wb')
-        else:
-            fo=open(fn,'w')
+        filePath = cmd[5:-2]
+        print 'Uploading: ' + filePath
+        #TODO check if binary mode
+        m = re.search('/(\d+)/?(.*)', filePath)
         self.conn.send('150 Opening data connection.\r\n')
         self.start_datasock()
+        allData = []
         while True:
             data=self.datasock.recv(1024)
             if not data: break
-            fo.write(data)
-        fo.close()
+            allData.append(data)
         self.stop_datasock()
+        bigString = ''.join(allData)
+        location = m.group(1)
+        fileName = m.group(2)
+        newItem = GameItem(fileName, False, False, [], bigString)
+        self.game[int(location)].items.append(newItem)
         self.conn.send('226 Transfer complete.\r\n')
 
 class FTPserver(threading.Thread):
