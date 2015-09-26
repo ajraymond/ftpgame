@@ -3,7 +3,6 @@
 
 import os,socket,threading,time
 import re
-#import traceback
 
 allow_delete = False
 local_ip = '127.0.0.1'
@@ -22,8 +21,17 @@ class GameItem:
         self.isLocked = isLocked
         self.data = data
         
+        self.observers = []
+        self.callbacks = []
+        
     def __str__(self):
         return "GameItem " + self.name
+        
+    def setName(self, name):
+        self.name = name
+        
+    def setLocked(self, state):
+        self.isLocked = state
         
     def remove(self):
         return self.parent.removeChild(self)
@@ -31,14 +39,37 @@ class GameItem:
     def addChild(self, item):
         self.items.append(item)
         item.parent = self
+        self.notifyObservers()
         
     # returns true if (at least?) 1 item was deleted
     def removeChild(self, item):
         oldItemCount = len(self.items)
         self.items = [o for o in self.items if (o.name != item.name or o.isLocked)]
         itemWasDeleted = len(self.items) < oldItemCount
+        if itemWasDeleted:
+            self.notifyObservers()
         return itemWasDeleted
-                       
+        
+    def observe(self, target, action):
+        target.addObserver(self)
+        self.callbacks.append(action)
+    
+    def triggerEvent(self, source):
+        for method in self.callbacks:
+            method(self, source)
+        
+    #TODO maybe is there already such a module in python?
+    def addObserver(self, observer):
+        self.observers.append(observer)
+        
+    def removeObserver(self, observer):
+        self.observers.remove(observer)
+ 
+    #TODO add event types
+    def notifyObservers(self):
+        for item in self.observers:
+            item.triggerEvent(self)
+ 
     def getItem(self, pathList):
         myItem = [o for o in self.items if (o.name == pathList[0])]
         if len(myItem) < 1:
@@ -67,7 +98,6 @@ class Level0(GameItem):
                        GameItem("rope-2", self, False, False, [], 'rope2'),
                        GameItem("door", self, True, True, [], '') ]
      
-        # on this level, the door opens if all ropes are cut
         
     def removeChild(self, item):
         retVal = GameItem.removeChild(self, item)
@@ -104,10 +134,26 @@ class Level4(GameItem):
     def __init__(self, parent):
         GameItem.__init__(self, "4", parent, True, True, [], '')
 
+# an alternate implementation of Level 0
+class Level5(GameItem):
+    def __init__(self, parent):
+        GameItem.__init__(self, "5", parent, True, False, [], '')
+        self.items.append(GameItem("rope-1", self, False, False, [], 'rope1'))
+        self.items.append(GameItem("rope-2", self, False, False, [], 'rope2'))
+        door = GameItem("door", self, True, True, [], '')
+        self.items.append(door)
+        def checkRopes(door, folder):
+            numberOfRopes = len([o for o in folder.items if o.name.startswith("rope")])
+            print(numberOfRopes)
+            if numberOfRopes == 0:
+                door.setName("door-open")
+                door.setLocked(False)
+        door.observe(self, checkRopes)
+        
 class GameRoot(GameItem):
     def __init__(self):
         GameItem.__init__(self, "", None, True, False, [], '')
-        self.NUM_LEVELS = 4
+        self.NUM_LEVELS = 6
         self.items = []
         for i in range(self.NUM_LEVELS):
             self.items.append(globals()['Level' + str(i)](self)) #pffft
