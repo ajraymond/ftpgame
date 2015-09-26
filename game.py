@@ -12,42 +12,65 @@ currdir=os.path.abspath('.')
 
 
 class GameItem:
-    def __init__(self, name, isDir, isLocked, contains, data):
+    def __init__(self, name, parent, isDir, isLocked, contains, data):
         self.name = name
+
+        self.parent = parent
+        self.items = contains
+
         self.isDir = isDir
         self.isLocked = isLocked
-        self.contains = contains
         self.data = data
         
     def __str__(self):
         return "GameItem " + self.name
         
-class Game:
-    def __init__(self):
-        self.items = []
+    def remove(self):
+        return self.parent.removeChild(self)
+        
+    def addChild(self, item):
+        self.items.append(item)
+        item.parent = self
         
     # returns true if (at least?) 1 item was deleted
-    def removeItemByName(self, itemName):
+    def removeChild(self, item):
         oldItemCount = len(self.items)
-        self.items = [o for o in self.items if (o.name != itemName or o.isLocked)]
+        self.items = [o for o in self.items if (o.name != item.name or o.isLocked)]
         itemWasDeleted = len(self.items) < oldItemCount
         return itemWasDeleted
-       
-    def getDataByName(self, itemName):
-        myItem = [o for o in self.items if (o.name == itemName)]
-        return myItem[0].data
-       
-# a level (scene?) with ropes
-class Level0(Game):
-    def __init__(self):
-        Game.__init__(self)
-        self.items = [ GameItem("rope-1", False, False, [], 'rope1'),  
-                       GameItem("rope-2", False, False, [], 'rope2'),
-                       GameItem("door", True, True, [], '') ]
+                       
+    def getItem(self, pathList):
+        myItem = [o for o in self.items if (o.name == pathList[0])]
+        if len(myItem) < 1:
+            print "Error cannot find item ", pathList
+            return None
+        if len(pathList) == 1:
+            return myItem[0]
+        else:
+            return myItem[0].getItem(pathList[1:])
+
+    def getURL(self):
+        partialURL = "/" + self.name
+        if self.parent is None:
+            return partialURL
+        else:
+            if self.parent.parent is None:
+                return partialURL
+            else:
+                return self.parent.getURL() + partialURL
+            
+# a level (scene?) with ropes and a locked door; when the ropes are deleted, the door opens
+class Level0(GameItem):
+    def __init__(self, parent):
+        GameItem.__init__(self, "0", parent, True, False, [], '')
+        self.items = [ GameItem("rope-1", self, False, False, [], 'rope1'),  
+                       GameItem("rope-2", self, False, False, [], 'rope2'),
+                       GameItem("door", self, True, True, [], '') ]
+     
+        # on this level, the door opens if all ropes are cut
         
-    # on this level, the door opens if all ropes are cut
-    def removeItemByName(self, itemName):
-        retVal = Game.removeItemByName(self, itemName)
+    def removeChild(self, item):
+        retVal = GameItem.removeChild(self, item)
         numberOfRopes = len([o for o in self.items if o.name.startswith("rope")])
         if numberOfRopes == 0:
             for x in [o for o in self.items if o.name.startswith("door")]:
@@ -55,40 +78,72 @@ class Level0(Game):
                 x.isLocked = False
         return retVal
                 
-    
-class Level1(Game):
-    def __init__(self):
-        Game.__init__(self)
-        self.items = [ GameItem("folder", True, True, [], '') ]
+# a single room
+class Level1(GameItem):
+    def __init__(self, parent):
+        GameItem.__init__(self, "1", parent, True, False, [], '')
+        self.items = [ GameItem("folder", self, True, True, [], '') ]
 
-class Level2(Game):
-    def __init__(self):
-        Game.__init__(self)
+# a hierarchy of folders and items
+class Level2(GameItem):
+    def __init__(self, parent):
+        GameItem.__init__(self, "2", parent, True, False, [], '')
+        prev = self
+        for x in range(3):
+            i = GameItem("sword-level-" + str(x), prev, False, False, [], str(x))
+            prev.items.append(i)
+            folder = GameItem("folder-" + str(x), prev, True, False, [], '')
+            prev.items.append(folder)
+            prev = folder
+        
+class Level3(GameItem):
+    def __init__(self, parent):
+        GameItem.__init__(self, "3", parent, True, True, [], '')
 
-class Level3(Game):
-    def __init__(self):
-        Game.__init__(self)
+class Level4(GameItem):
+    def __init__(self, parent):
+        GameItem.__init__(self, "4", parent, True, True, [], '')
 
-class Level4(Game):
+class GameRoot(GameItem):
     def __init__(self):
-        Game.__init__(self)
-
-class GameState():
-    def __init__(self):
+        GameItem.__init__(self, "", None, True, False, [], '')
         self.NUM_LEVELS = 4
-        self.levels = []
+        self.items = []
         for i in range(self.NUM_LEVELS):
-            self.levels.append(globals()['Level' + str(i)]()) #pffft
-gameState = GameState()
+            self.items.append(globals()['Level' + str(i)](self)) #pffft
+    
+    def getItemByURL(self, URL, cwd):
+        if URL == '/':
+            return self;
+        else:
+            target = cwd
+            if re.match('/.*', URL):
+                # absolute URL
+                target = self
+            m = re.findall('([^/]+)', URL)
+            return target.getItem(m)
+    
+    #for upload
+    #returns tuple (targetFileName, targetLocation)
+    def getItemAndLocationbyURL(self, URL, cwd):
+        #TODO there's an unlikely possibility that we get a path
+        #     that is relative to the current cwd; could be improved
+        target = cwd
+        m = re.match('(?P<absolute>/)?(?P<path>.*/)?(?P<filename>[^/]+)', URL)
+        if m.group('absolute'):
+            target = self.getItemByURL("/" + m.group('path'), cwd)
+        return (m.group('filename'), target)
+
+sharedGame = GameRoot()
             
 class FTPserverThread(threading.Thread):
     def __init__(self,(conn,addr)):
         self.conn=conn
         self.addr=addr
-        self.cwd = '/'
         self.rest=False
         self.pasv_mode=False
-        self.game = gameState.levels
+        self.root = sharedGame
+        self.cwd = self.root
         threading.Thread.__init__(self)
 
     def run(self):
@@ -105,6 +160,7 @@ class FTPserverThread(threading.Thread):
                     print 'ERROR:',e
                     #traceback.print_exc()
                     self.conn.send('500 Sorry.\r\n')
+                    
 
     def SYST(self,cmd):
         self.conn.send('215 UNIX Type: L8\r\n')
@@ -132,21 +188,23 @@ class FTPserverThread(threading.Thread):
             self.cwd=os.path.abspath(os.path.join(self.cwd,'..'))
         self.conn.send('200 OK.\r\n')
         
-    def PWD(self,cmd):
-        #TODO
-        cwd='/'
-        self.conn.send('257 \"%s\"\r\n' % cwd)
+    def XPWD(self, cmd):
+        self.PWD(cmd)
+        
+    def PWD(self, cmd):
+        URL = self.cwd.getURL()
+        self.conn.send('257 \"%s\"\r\n' % URL)
         
     def CWD(self,cmd):
-        chwd=cmd[4:-2]
-        m = re.search('/(\d+)/?(.*)', chwd)
-        if chwd == '/':
+        requestedDir = cmd[4:-2]
+        baseURL = self.cwd
+        item = self.root.getItemByURL(requestedDir, baseURL)
+        if not item is None and item.isDir and not item.isLocked:
             self.conn.send('250 OK.\r\n')
-            self.cwd = chwd
-        elif not m is None:
-            self.conn.send('250 OK.\r\n')
-            self.cwd = '/'+m.group(1)+'/'
+            self.cwd = item
         else:
+            #returning Access Denied because a more descriptive message
+            # might reveal what is hiding, say, behind a closed door
             self.conn.send('550 Access Denied, Dude.\r\n')
 
     def PORT(self,cmd):
@@ -185,13 +243,9 @@ class FTPserverThread(threading.Thread):
     def LIST(self,cmd):
         self.conn.send('150 Here comes the directory listing.\r\n')
         self.start_datasock()   
-        if self.cwd == '/':
-            for i in range(len(self.game)):
-                self.datasock.send('drwxrwxrwx 1 user group 1'+time.strftime(' %b %d %H:%M ', time.localtime())+str(i)+'\r\n')
-        else:
-            m = re.search('^/(\d+)/?(.*)', self.cwd)
-            for o in self.game[int(m.group(1))].items:
-                self.datasock.send(self.toListItem(o) + '\r\n')
+        #TODO do something if cwd doesn't exist/isn't accessible (unlikely?)
+        for o in self.cwd.items:
+            self.datasock.send(self.toListItem(o) + '\r\n')
         self.stop_datasock()
         self.conn.send('226 Directory send OK.\r\n')
 
@@ -202,7 +256,7 @@ class FTPserverThread(threading.Thread):
         return d+fullmode+' 1 user group '+str(len(o.data))+' '+ftime+o.name
 
     def MKD(self,cmd):
-        dn=os.path.join(self.cwd,cmd[4:-2])
+        dn = os.path.join(self.cwd, cmd[4:-2])
         os.mkdir(dn)
         self.conn.send('257 Directory created.\r\n')
 
@@ -217,10 +271,11 @@ class FTPserverThread(threading.Thread):
     def DELE(self,cmd):
         was_deleted = False
         
-        filePath = cmd[5:-2]
-        m = re.search('/(\d+)/?(.*)', filePath)
-        if not m is None:
-            was_deleted = self.game[int(m.group(1))].removeItemByName(m.group(2))
+        requestedURL = cmd[5:-2]
+        baseURL = self.cwd
+        file = self.root.getItemByURL(requestedURL, baseURL)
+        if not file is None:
+            was_deleted = file.remove()
         
         if was_deleted:
             self.conn.send('250 File deleted.\r\n')
@@ -242,23 +297,25 @@ class FTPserverThread(threading.Thread):
         self.conn.send('250 File position reseted.\r\n')
 
     def RETR(self,cmd):
-        filePath = cmd[5:-2]
-        print 'Downloading:' + filePath
-        #TODO check if we're in binary mode with self.mode=='I':
-        self.conn.send('150 Opening data connection.\r\n')
-        #TODO check if RESTore mode? unsure
-        #TODO break down into pieces, like 1024 bytes...
-        data = ''
-        m = re.search('/(\d+)/?(.*)', filePath)
-        if not m is None:
-            data = self.game[int(m.group(1))].getDataByName(m.group(2))
-        self.start_datasock()
-        try:
-            sent = self.datasock.sendall(data)
-        except socket.error:
-            print 'Send failed: ' + sent
-        self.stop_datasock()
-        self.conn.send('226 Transfer complete.\r\n')
+        requestedURL = cmd[5:-2]
+        baseURL = self.cwd
+        item = self.root.getItemByURL(requestedURL, baseURL)
+        if item is None:
+            self.conn.send('450 Access Denied.\r\n')
+        else:
+            print 'Downloading:' + requestedURL
+            #TODO check if we're in binary mode with self.mode=='I':
+            self.conn.send('150 Opening data connection.\r\n')
+            #TODO check if RESTore mode? unsure
+            #TODO break down into pieces, like 1024 bytes...
+            data = item.data
+            self.start_datasock()
+            try:
+                sent = self.datasock.sendall(data)
+            except socket.error:
+                print 'Send failed: ' + sent
+            self.stop_datasock()
+            self.conn.send('226 Transfer complete.\r\n')
 
     def SIZE(self,cmd):
         self.conn.send('213 100\r\n')
@@ -273,7 +330,8 @@ class FTPserverThread(threading.Thread):
         filePath = cmd[5:-2]
         print 'Uploading: ' + filePath
         #TODO check if binary mode
-        m = re.search('/(\d+)/?(.*)', filePath)
+        #TODO check if cwd is still writeable (unlikely?)
+        #TODO check if file already exists there
         self.conn.send('150 Opening data connection.\r\n')
         self.start_datasock()
         allData = []
@@ -283,10 +341,11 @@ class FTPserverThread(threading.Thread):
             allData.append(data)
         self.stop_datasock()
         bigString = ''.join(allData)
-        location = m.group(1)
-        fileName = m.group(2)
-        newItem = GameItem(fileName, False, False, [], bigString)
-        self.game[int(location)].items.append(newItem)
+        
+        (fileName, target) = self.root.getItemAndLocationbyURL(filePath, self.cwd)
+        
+        newItem = GameItem(fileName, self.cwd, False, False, [], bigString)
+        self.cwd.addChild(newItem)
         self.conn.send('226 Transfer complete.\r\n')
 
 class FTPserver(threading.Thread):
