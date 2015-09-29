@@ -12,11 +12,11 @@ local_ip = '127.0.0.1'
 local_port = 21
 
 
-class GameItem:
+class GameItem(object):
     def __init__(self, name, is_dir=False, is_locked=False, contains=None, data=""):
         if not contains:
             contains = []
-        self.name = name
+        self._name = name
 
         self.parent = None
         self.items = contains
@@ -25,14 +25,25 @@ class GameItem:
         self.is_locked = is_locked
         self.data = data
 
-        self.observers = []
-        self.callbacks = []
+        #array of tuples (action, condition)
+        self.watches = []
 
     def __str__(self):
         return "GameItem " + self.name
 
-    def remove(self):
-        return self.parent.remove_child(self)
+    @property
+    def name(self):
+        """
+        Item name as displayed to players.
+        """
+        return self._name + ("-locked" if self.is_locked and self.is_dir else "")
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    def remove(self, force=False):
+        return self.parent.remove_child(self, force)
 
     def add_child(self, item):
         self.items.append(item)
@@ -40,33 +51,24 @@ class GameItem:
         self.notify_observers()
 
     # returns true if (at least?) 1 item was deleted
-    def remove_child(self, item):
+    def remove_child(self, item, force=False):
         old_item_count = len(self.items)
-        self.items = [o for o in self.items if (o.name != item.name or o.is_locked)]
+        self.items = [o for o in self.items if (o.name != item.name or (o.is_locked and not force))]
         item_was_deleted = len(self.items) < old_item_count
         if item_was_deleted:
             self.notify_observers()
         return item_was_deleted
 
-    def observe(self, target, action):
-        target.add_observer(self)
-        self.callbacks.append(action)
+    # action is a function that takes the watched element as a parameter
+    # condition is a function with no parameters
+    def add_watch(self, condition, action):
+        self.watches.append((action, condition))
 
-    def trigger_event(self, source):
-        for method in self.callbacks:
-            method(self, source)
-
-    # TODO maybe is there already such a module in python?
-    def add_observer(self, observer):
-        self.observers.append(observer)
-
-    def remove_observer(self, observer):
-        self.observers.remove(observer)
-
-    # TODO add event types
+    # TODO add event types?
     def notify_observers(self):
-        for item in self.observers:
-            item.trigger_event(self)
+        for (action, condition) in self.watches:
+            if condition():
+                action(self)
 
     def get_item(self, path_list):
         my_item = [o for o in self.items if (o.name == path_list[0])]
@@ -142,13 +144,8 @@ class Level3(GameItem):
         door = GameItem("door", is_dir=True, is_locked=True)
         self.items.append(door)
 
-        def check_ropes(checking_door, folder):
-            number_of_ropes = len([o for o in folder.items if o.name.startswith("rope")])
-            if number_of_ropes == 0:
-                checking_door.name = "door-open"
-                checking_door.is_locked = False
-
-        door.observe(self, check_ropes)
+        self.add_watch(lambda: len([o for o in self.items if o.name.startswith("rope")]) == 0,
+                       lambda watchee: setattr(door, 'is_locked', False),)
 
 
 # a level with a simple story!
@@ -158,56 +155,39 @@ class Level4(GameItem):
         padlock = UniqueItem(name="rusty-padlock")
         self.add_child(padlock)
 
-        rusty_door = GameItem(name="rusty-door-locked", is_dir=True, is_locked=True)
+        rusty_door = GameItem(name="rusty-door", is_dir=True, is_locked=True)
         self.add_child(rusty_door)
-        # TODO turn this into a more formal, repeatable block
-        def check_padlock(checking_door, folder):
-            number_of_padlocks = len([o for o in folder.items if "padlock" in o.name])
-            if number_of_padlocks == 0:
-                checking_door.name = "rusty-door-open"
-                checking_door.is_locked = False
-        rusty_door.observe(self, check_padlock)
+        self.add_watch(lambda: padlock not in self.items,
+                       lambda watchee: setattr(rusty_door, 'is_locked', False))
 
         golden_key = UniqueItem(name="golden-key")
         rusty_door.add_child(golden_key)
 
-        golden_door = GameItem("golden-door-locked", is_dir=True, is_locked=True)
+        golden_door = GameItem("golden-door", is_dir=True, is_locked=True)
         self.add_child(golden_door)
-        def check_golden_key(checking_door, folder):
-            number_of_golden_keys = len([o for o in folder.items if golden_key.data == o.data])
-            if number_of_golden_keys == 1:
-                checking_door.name = "golden-door-open"
-                checking_door.is_locked = False
-        golden_door.observe(self, check_golden_key)
+        self.add_watch(lambda: len([o for o in self.items if golden_key.data == o.data]) > 0,
+                       lambda watchee: setattr(golden_door, 'is_locked', False))
 
-        guarded_door = GameItem("guarded-door", is_dir=True, is_locked=True)
+        guarded_door = GameItem("castle", is_dir=True, is_locked=True)
         golden_door.add_child(guarded_door)
         guard = GameItem("weak-guard")
         golden_door.add_child(guard)
-        def check_guard(checking_door, folder):
-            number_of_guards = len([o for o in folder.items if "weak-guard" in o.name])
-            number_of_irons = len([o for o in folder.items if "iron" in o.name])
-            if number_of_guards == 0 and number_of_irons < 1: # TODO myeah - remove check instead?
-                checking_door.name = "guarded-door-open"
-                checking_door.is_locked = False
-                golden_door.add_child(iron)
-        guarded_door.observe(golden_door, check_guard)
-
         iron = UniqueItem(name="iron")
-        sword = UniqueItem(name="sword")
+        golden_door.add_watch(lambda: guard not in golden_door.items
+                                      and len([o for o in golden_door.items if "iron" in o.name]) == 0,
+                              lambda watchee: [setattr(guarded_door, 'is_locked', False),
+                                              golden_door.add_child(iron)])
 
         forge = GameItem("forge", is_dir=True)
         self.add_child(forge)
         blacksmith = GameItem("Godor-the-blacksmith", is_locked=True)
         blacksmith.message = "Give me some iron and I will forge you a sword!"
         forge.add_child(blacksmith)
-        def check_for_iron(target, source): # in this case the forge is both source and target
-            irons = [o for o in source.items if o.data == iron.data]
-            number_of_irons = len(irons)
-            if number_of_irons > 0:
-                map(lambda x: x.remove(), irons)
-                target.add_child(sword)
-        forge.observe(forge, check_for_iron)
+        sword = UniqueItem(name="sword")
+        forge.add_watch(lambda: len([o for o in forge.items if o.data == iron.data]) > 0
+                                and sword not in forge.items, # TODO find out why things break without this
+                        lambda watchee: [map(lambda x: x.remove(), [o for o in watchee.items if o.data == iron.data]),
+                                         forge.add_child(sword)])
 
         dragon = GameItem("fierce-dragon", is_locked=True)
         guarded_door.add_child(dragon)
@@ -215,21 +195,20 @@ class Level4(GameItem):
         princess = GameItem("Pissy-the-Princess", is_locked=True)
         princess.message = "I'm afraid of the dragon!"
         guarded_door.add_child(princess)
-        def check_for_sword(target, source):
-            swords = [o for o in source.items if o.data == sword.data]
-            number_of_swords = len(swords)
-            if number_of_swords > 0:
-                map(lambda x: x.remove(), swords)
-                dragon.remove()
-                princess.message = "I'm pissed, you never send me any love letters :("
-                guarded_door.observe(guarded_door, check_for_message)
-        def check_for_message(target, source):
-            messages = [o for o in source.items if o.data.upper() == "i love you".upper()]
-            number_of_messages = len(messages)
-            if number_of_messages > 0:
-                princess.message = "Nice. My bed is this way, you naughty knight!"
-                princess.name = "Saucy-the-Sexy-Princess"
-        guarded_door.observe(guarded_door, check_for_sword)
+
+
+        def kill_dragon(watchee):
+            map(GameItem.remove, [o for o in watchee.items if o.data == sword.data])
+            dragon.remove(force=True)
+            princess.message = "I'm pissed, you never send me any love letters :("
+            guarded_door.add_watch(lambda: len([o for o in guarded_door.items
+                                                if o.data.upper() == "i love you".upper()]) > 0,
+                               lambda watchee: [setattr(princess, 'message',
+                                                        "Nice. My bed is this way, you naughty knight!"),
+                                               setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
+        guarded_door.add_watch(lambda: [o for o in guarded_door.items if o.data == sword.data], kill_dragon)
+
+
 
 class GameRoot(GameItem):
     def __init__(self):
@@ -266,10 +245,10 @@ sharedGame = GameRoot()
 
 
 def to_list_item(o):
-    full_mode = 'rwxrwxrwx'
+    access = "---------" if o.is_locked else 'rwxrwxrwx'
     d = o.is_dir and 'd' or '-'
     ftime = time.strftime(' %b %d %H:%M ', time.localtime())
-    return d + full_mode + ' 1 user group ' + str(len(o.data)) + ' ' + ftime + o.name
+    return d + access + ' 1 user group ' + str(len(o.data)) + ' ' + ftime + o.name
 
 
 class FTPserverThread(threading.Thread):
