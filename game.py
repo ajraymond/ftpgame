@@ -25,7 +25,7 @@ class GameItem(object):
         self.is_locked = is_locked
         self.data = data
 
-        #array of tuples (action, condition)
+        # array of tuples (action, condition)
         self.watches = []
 
     def __str__(self):
@@ -105,6 +105,8 @@ class Level0(GameItem):
         self.add_child(GameItem("rope-2", data='rope2'))
         self.add_child(GameItem("door", is_dir=True, is_locked=True))
 
+    # TODO I think this can be fixed + made prettier all over the place
+    # http://stackoverflow.com/questions/5031711/python-cleanest-way-to-override-init-where-an-optional-kwarg-must-be-used
     def remove_child(self, item):
         ret_val = GameItem.remove_child(self, item)
         number_of_ropes = len([o for o in self.items if o.name.startswith("rope")])
@@ -173,10 +175,9 @@ class Level4(GameItem):
         guard = GameItem("weak-guard")
         golden_door.add_child(guard)
         iron = UniqueItem(name="iron")
-        golden_door.add_watch(lambda: guard not in golden_door.items
-                                      and len([o for o in golden_door.items if "iron" in o.name]) == 0,
-                              lambda watchee: [setattr(guarded_door, 'is_locked', False),
-                                              golden_door.add_child(iron)])
+        golden_door.add_watch(lambda: guard not in golden_door.items and
+                              len([o for o in golden_door.items if "iron" in o.name]) == 0,
+                              lambda watchee: [setattr(guarded_door, 'is_locked', False), golden_door.add_child(iron)])
 
         forge = GameItem("forge", is_dir=True)
         self.add_child(forge)
@@ -184,8 +185,8 @@ class Level4(GameItem):
         blacksmith.message = "Give me some iron and I will forge you a sword!"
         forge.add_child(blacksmith)
         sword = UniqueItem(name="sword")
-        forge.add_watch(lambda: len([o for o in forge.items if o.data == iron.data]) > 0
-                                and sword not in forge.items, # TODO find out why things break without this
+        forge.add_watch(lambda: len([o for o in forge.items if o.data == iron.data]) > 0 and
+                        sword not in forge.items,  # TODO find out why things break without this
                         lambda watchee: [map(lambda x: x.remove(), [o for o in watchee.items if o.data == iron.data]),
                                          forge.add_child(sword)])
 
@@ -196,18 +197,16 @@ class Level4(GameItem):
         princess.message = "I'm afraid of the dragon!"
         guarded_door.add_child(princess)
 
-
         def kill_dragon(watchee):
             map(GameItem.remove, [o for o in watchee.items if o.data == sword.data])
             dragon.remove(force=True)
             princess.message = "I'm pissed, you never send me any love letters :("
-            guarded_door.add_watch(lambda: len([o for o in guarded_door.items
-                                                if o.data.upper() == "i love you".upper()]) > 0,
-                               lambda watchee: [setattr(princess, 'message',
-                                                        "Nice. My bed is this way, you naughty knight!"),
-                                               setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
+            guarded_door.add_watch(lambda: len([i for i in guarded_door.items
+                                                if i.data.upper() == "i love you".upper()]) > 0,
+                                   lambda w: [setattr(princess, 'message',
+                                              "Nice. My bed is this way, you naughty knight!"),
+                                              setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
         guarded_door.add_watch(lambda: [o for o in guarded_door.items if o.data == sword.data], kill_dragon)
-
 
 
 class GameRoot(GameItem):
