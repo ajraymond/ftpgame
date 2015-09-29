@@ -302,10 +302,6 @@ class FTPserverThread(threading.Thread):
         self.mode = cmd[5]
         self.conn.send('200 Binary mode.\r\n')
 
-    def ftp_cdup(self, cmd):
-        # TODO
-        self.conn.send('451 Not implemented.\r\n')
-
     def ftp_xpwd(self, cmd):
         self.ftp_pwd(cmd)
 
@@ -313,10 +309,18 @@ class FTPserverThread(threading.Thread):
         url = self.cwd.get_url()
         self.conn.send('257 \"%s\"\r\n' % url)
 
+    def ftp_cdup(self, cmd):
+        self.ftp_cwd("CWD ..\r\n")
+
     def ftp_cwd(self, cmd):
         requested_dir = cmd[4:-2]
-        base_url = self.cwd
-        item = self.root.get_item_by_url(requested_dir, base_url)
+        # treat ".." as special case, whether it comes from CDUP or was input literally
+        if requested_dir.strip() == "..":
+            item = self.cwd.parent
+        else:
+            base_url = self.cwd
+            item = self.root.get_item_by_url(requested_dir, base_url)
+
         if item is not None and item.is_dir and not item.is_locked:
             self.conn.send('250 OK.\r\n')
             self.cwd = item
