@@ -1,29 +1,28 @@
 #!/usr/bin/env python2
 # coding: utf-8
 
-import os
 import socket
 import threading
 import time
 import re
+import uuid
 
 allow_delete = False
 local_ip = '127.0.0.1'
 local_port = 21
-currdir = os.path.abspath('.')
 
 
 class GameItem:
-    def __init__(self, name, parent=None, is_dir=False, is_locked=False, contains=None, data=""):
+    def __init__(self, name, is_dir=False, is_locked=False, contains=None, data=""):
         if not contains:
             contains = []
         self.name = name
 
-        self.parent = parent
+        self.parent = None
         self.items = contains
 
-        self.isDir = is_dir
-        self.isLocked = is_locked
+        self.is_dir = is_dir
+        self.is_locked = is_locked
         self.data = data
 
         self.observers = []
@@ -43,7 +42,7 @@ class GameItem:
     # returns true if (at least?) 1 item was deleted
     def remove_child(self, item):
         old_item_count = len(self.items)
-        self.items = [o for o in self.items if (o.name != item.name or o.isLocked)]
+        self.items = [o for o in self.items if (o.name != item.name or o.is_locked)]
         item_was_deleted = len(self.items) < old_item_count
         if item_was_deleted:
             self.notify_observers()
@@ -90,13 +89,19 @@ class GameItem:
                 return self.parent.get_url() + partial_url
 
 
+# a regular game item, with an auto-generated unique key
+class UniqueItem(GameItem):
+    def __init__(self, name, is_dir=False, is_locked=False, contains=None):
+        GameItem.__init__(self, name, is_dir, is_locked, contains, data=str(uuid.uuid4()))
+
+
 # a level (scene?) with ropes and a locked door; when the ropes are deleted, the door opens
 class Level0(GameItem):
-    def __init__(self, parent):
-        GameItem.__init__(self, name="0", parent=parent, is_dir=True)
-        self.items = [GameItem("rope-1", parent=self, data='rope1'),
-                      GameItem("rope-2", parent=self, data='rope2'),
-                      GameItem("door", parent=self, is_dir=True, is_locked=True)]
+    def __init__(self):
+        GameItem.__init__(self, name="0", is_dir=True)
+        self.add_child(GameItem("rope-1", data='rope1'))
+        self.add_child(GameItem("rope-2", data='rope2'))
+        self.add_child(GameItem("door", is_dir=True, is_locked=True))
 
     def remove_child(self, item):
         ret_val = GameItem.remove_child(self, item)
@@ -104,66 +109,135 @@ class Level0(GameItem):
         if number_of_ropes == 0:
             for x in [o for o in self.items if o.name.startswith("door")]:
                 x.name = "door-open"
-                x.isLocked = False
+                x.is_locked = False
         return ret_val
 
 
 # a single room
 class Level1(GameItem):
-    def __init__(self, parent):
-        GameItem.__init__(self, name="1", parent=parent, is_dir=True)
-        self.items = [GameItem(name="folder", parent=self, is_dir=True, is_locked=True)]
+    def __init__(self):
+        GameItem.__init__(self, name="1", is_dir=True)
+        self.add_child(GameItem(name="folder", is_dir=True, is_locked=True))
 
 
 # a hierarchy of folders and items
 class Level2(GameItem):
-    def __init__(self, parent):
-        GameItem.__init__(self, name="2", parent=parent, is_dir=True)
+    def __init__(self):
+        GameItem.__init__(self, name="2", is_dir=True)
         prev = self
         for x in range(3):
-            i = GameItem(name="sword-level-" + str(x), parent=prev, data=str(x))
-            prev.items.append(i)
-            folder = GameItem(name="folder-" + str(x), parent=prev, is_dir=True)
-            prev.items.append(folder)
+            i = GameItem(name="sword-level-" + str(x), data=str(x))
+            prev.add_child(i)
+            folder = GameItem(name="folder-" + str(x), is_dir=True)
+            prev.add_child(folder)
             prev = folder
 
 
-class Level3(GameItem):
-    def __init__(self, parent):
-        GameItem.__init__(self, name="3", parent=parent, is_dir=True, is_locked=True)
-
-
 # an alternate implementation of Level 0
-class Level4(GameItem):
-    def __init__(self, parent):
-        GameItem.__init__(self, name="4", parent=parent, is_dir=True)
-        self.items.append(GameItem(name="rope-1", parent=self, data='rope1'))
-        self.items.append(GameItem(name="rope-2", parent=self, data='rope2'))
-        door = GameItem("door", parent=self, is_dir=True, is_locked=True)
+class Level3(GameItem):
+    def __init__(self):
+        GameItem.__init__(self, name="3", is_dir=True)
+        self.add_child(GameItem(name="rope-1", data='rope1'))
+        self.add_child(GameItem(name="rope-2", data='rope2'))
+        door = GameItem("door", is_dir=True, is_locked=True)
         self.items.append(door)
 
         def check_ropes(checking_door, folder):
             number_of_ropes = len([o for o in folder.items if o.name.startswith("rope")])
-            print(number_of_ropes)
             if number_of_ropes == 0:
                 checking_door.name = "door-open"
-                checking_door.locked = False
+                checking_door.is_locked = False
 
         door.observe(self, check_ropes)
 
 
-class Level5(GameItem):
-    def __init__(self, parent):
-        GameItem.__init__(self, name="5", parent=parent, is_dir=True)
+# a level with a simple story!
+class Level4(GameItem):
+    def __init__(self):
+        GameItem.__init__(self, name="4", is_dir=True)
+        padlock = UniqueItem(name="rusty-padlock")
+        self.add_child(padlock)
 
+        rusty_door = GameItem(name="rusty-door-locked", is_dir=True, is_locked=True)
+        self.add_child(rusty_door)
+        # TODO turn this into a more formal, repeatable block
+        def check_padlock(checking_door, folder):
+            number_of_padlocks = len([o for o in folder.items if "padlock" in o.name])
+            if number_of_padlocks == 0:
+                checking_door.name = "rusty-door-open"
+                checking_door.is_locked = False
+        rusty_door.observe(self, check_padlock)
+
+        golden_key = UniqueItem(name="golden-key")
+        rusty_door.add_child(golden_key)
+
+        golden_door = GameItem("golden-door-locked", is_dir=True, is_locked=True)
+        self.add_child(golden_door)
+        def check_golden_key(checking_door, folder):
+            number_of_golden_keys = len([o for o in folder.items if golden_key.data == o.data])
+            if number_of_golden_keys == 1:
+                checking_door.name = "golden-door-open"
+                checking_door.is_locked = False
+        golden_door.observe(self, check_golden_key)
+
+        guarded_door = GameItem("guarded-door", is_dir=True, is_locked=True)
+        golden_door.add_child(guarded_door)
+        guard = GameItem("weak-guard")
+        golden_door.add_child(guard)
+        def check_guard(checking_door, folder):
+            number_of_guards = len([o for o in folder.items if "weak-guard" in o.name])
+            number_of_irons = len([o for o in folder.items if "iron" in o.name])
+            if number_of_guards == 0 and number_of_irons < 1: # TODO myeah - remove check instead?
+                checking_door.name = "guarded-door-open"
+                checking_door.is_locked = False
+                golden_door.add_child(iron)
+        guarded_door.observe(golden_door, check_guard)
+
+        iron = UniqueItem(name="iron")
+        sword = UniqueItem(name="sword")
+
+        forge = GameItem("forge", is_dir=True)
+        self.add_child(forge)
+        blacksmith = GameItem("Godor-the-blacksmith", is_locked=True)
+        blacksmith.message = "Give me some iron and I will forge you a sword!"
+        forge.add_child(blacksmith)
+        def check_for_iron(target, source): # in this case the forge is both source and target
+            irons = [o for o in source.items if o.data == iron.data]
+            number_of_irons = len(irons)
+            if number_of_irons > 0:
+                map(lambda x: x.remove(), irons)
+                target.add_child(sword)
+        forge.observe(forge, check_for_iron)
+
+        dragon = GameItem("fierce-dragon", is_locked=True)
+        guarded_door.add_child(dragon)
+        dragon.message = "Come closer, for I am hungry!"
+        princess = GameItem("Pissy-the-Princess", is_locked=True)
+        princess.message = "I'm afraid of the dragon!"
+        guarded_door.add_child(princess)
+        def check_for_sword(target, source):
+            swords = [o for o in source.items if o.data == sword.data]
+            number_of_swords = len(swords)
+            if number_of_swords > 0:
+                map(lambda x: x.remove(), swords)
+                dragon.remove()
+                princess.message = "I'm pissed, you never send me any love letters :("
+                guarded_door.observe(guarded_door, check_for_message)
+        def check_for_message(target, source):
+            messages = [o for o in source.items if o.data.upper() == "i love you".upper()]
+            number_of_messages = len(messages)
+            if number_of_messages > 0:
+                princess.message = "Nice. My bed is this way, you naughty knight!"
+                princess.name = "Saucy-the-Sexy-Princess"
+        guarded_door.observe(guarded_door, check_for_sword)
 
 class GameRoot(GameItem):
     def __init__(self):
         GameItem.__init__(self, name="", is_dir=True)
-        self.NUM_LEVELS = 6
+        self.NUM_LEVELS = 5
         self.items = []
         for i in range(self.NUM_LEVELS):
-            self.items.append(globals()['Level' + str(i)](self))  # pffft
+            self.add_child(globals()['Level' + str(i)]())  # pffft
 
     def get_item_by_url(self, url, cwd):
         if url == '/':
@@ -193,7 +267,7 @@ sharedGame = GameRoot()
 
 def to_list_item(o):
     full_mode = 'rwxrwxrwx'
-    d = o.isDir and 'd' or '-'
+    d = o.is_dir and 'd' or '-'
     ftime = time.strftime(' %b %d %H:%M ', time.localtime())
     return d + full_mode + ' 1 user group ' + str(len(o.data)) + ' ' + ftime + o.name
 
@@ -265,7 +339,7 @@ class FTPserverThread(threading.Thread):
         requested_dir = cmd[4:-2]
         base_url = self.cwd
         item = self.root.get_item_by_url(requested_dir, base_url)
-        if item is not None and item.isDir and not item.isLocked:
+        if item is not None and item.is_dir and not item.is_locked:
             self.conn.send('250 OK.\r\n')
             self.cwd = item
         else:
@@ -355,6 +429,8 @@ class FTPserverThread(threading.Thread):
         item = self.root.get_item_by_url(requested_url, base_url)
         if item is None:
             self.conn.send('450 Access Denied.\r\n')
+        if item.is_locked and item.message is not None:
+            self.conn.send('450 ' + item.message + '\r\n')
         else:
             print 'Downloading:' + requested_url
             # TODO check if we're in binary mode with self.mode=='I':
@@ -363,6 +439,7 @@ class FTPserverThread(threading.Thread):
             # TODO break down into pieces, like 1024 bytes...
             data = item.data
             self.start_datasock()
+            sent = "(unknown)"
             try:
                 sent = self.datasock.sendall(data)
             except socket.error:
@@ -398,7 +475,7 @@ class FTPserverThread(threading.Thread):
 
         (file_name, target) = self.root.get_item_and_location_by_url(file_path, self.cwd)
 
-        new_item = GameItem(name=file_name, parent=self.cwd, data=big_string)
+        new_item = GameItem(name=file_name, data=big_string)
         self.cwd.add_child(new_item)
         self.conn.send('226 Transfer complete.\r\n')
 
