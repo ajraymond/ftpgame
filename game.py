@@ -13,7 +13,8 @@ local_port = 21
 
 
 class GameItem(object):
-    def __init__(self, name, is_dir=False, is_locked=False, contains=None, data=""):
+    def __init__(self, name, is_dir=False, is_locked=False, contains=None, data="",
+                 message=None, message_stor=None, message_dele=None, message_retr=None):
         if not contains:
             contains = []
         self._name = name
@@ -24,6 +25,11 @@ class GameItem(object):
         self.is_dir = is_dir
         self.is_locked = is_locked
         self.data = data
+
+        self._message = message
+        self._message_stor = message_stor
+        self._message_dele = message_dele
+        self._message_retr = message_retr
 
         # array of tuples (action, condition)
         self.watches = []
@@ -49,6 +55,38 @@ class GameItem(object):
         self.items.append(item)
         item.parent = self
         self.notify_observers()
+
+    @property
+    def message(self):
+        """
+        Message sent to the user when trying to retrieve an inaccessible item (e.g. talking to an NPC).
+        """
+        return self._message
+
+    @message.setter
+    def message(self, new_message):
+        self._message = new_message
+
+    @property
+    def message_stor(self):
+        """
+        Message sent to the user after a file is successfully uploaded to the directory.
+        """
+        return self._message_stor
+
+    @property
+    def message_dele(self):
+        """
+        Message sent to the user as the item is deleted.
+        """
+        return self._message_dele
+
+    @property
+    def message_retr(self):
+        """
+        Message sent to the user as the item is sucessfully downloaded.
+        """
+        return self._message_retr
 
     # returns true if (at least?) 1 item was deleted
     def remove_child(self, item, force=False):
@@ -93,8 +131,10 @@ class GameItem(object):
 
 # a regular game item, with an auto-generated unique key
 class UniqueItem(GameItem):
-    def __init__(self, name, is_dir=False, is_locked=False, contains=None):
-        GameItem.__init__(self, name, is_dir, is_locked, contains, data=str(uuid.uuid4()))
+    #TODO fix the parameters (see StackOverflow comment in this file)
+    def __init__(self, name, is_dir=False, is_locked=False, contains=None, message_retr=None, message_dele=None):
+        GameItem.__init__(self, name, is_dir, is_locked, contains, message_retr=message_retr, message_dele=message_dele,
+                          data=str(uuid.uuid4()))
 
 
 # a level (scene?) with ropes and a locked door; when the ropes are deleted, the door opens
@@ -154,7 +194,8 @@ class Level3(GameItem):
 class Level4(GameItem):
     def __init__(self):
         GameItem.__init__(self, name="4", is_dir=True)
-        padlock = UniqueItem(name="rusty-padlock")
+        padlock = UniqueItem(name="rusty-padlock",
+                             message_dele="The old padlock falls apart, leaving the door open.")
         self.add_child(padlock)
 
         rusty_door = GameItem(name="rusty-door", is_dir=True, is_locked=True)
@@ -170,43 +211,44 @@ class Level4(GameItem):
         self.add_watch(lambda: len([o for o in self.items if golden_key.data == o.data]) > 0,
                        lambda watchee: setattr(golden_door, 'is_locked', False))
 
-        guarded_door = GameItem("castle", is_dir=True, is_locked=True)
-        golden_door.add_child(guarded_door)
-        guard = GameItem("weak-guard")
+        castle = GameItem("castle", is_dir=True, is_locked=True,
+                                message_stor="Is this a gift for me? Is this a letter at last?!")
+        golden_door.add_child(castle)
+        guard = GameItem("weak-guard",
+                         message_dele="How dare you attack me! Hm, this loot really doesn't help me fight ba--")
         golden_door.add_child(guard)
         iron = UniqueItem(name="iron")
         golden_door.add_watch(lambda: guard not in golden_door.items and
                               len([o for o in golden_door.items if "iron" in o.name]) == 0,
-                              lambda watchee: [setattr(guarded_door, 'is_locked', False), golden_door.add_child(iron)])
+                              lambda watchee: [setattr(castle, 'is_locked', False), golden_door.add_child(iron)])
 
-        forge = GameItem("forge", is_dir=True)
+        forge = GameItem("forge", is_dir=True, message_stor="Let me see what you have given me...")
         self.add_child(forge)
-        blacksmith = GameItem("Godor-the-blacksmith", is_locked=True)
-        blacksmith.message = "Give me some iron and I will forge you a sword!"
+        blacksmith = GameItem("Godor-the-blacksmith", is_locked=True,
+                              message="Give me some iron and I will forge you a sword!")
         forge.add_child(blacksmith)
-        sword = UniqueItem(name="sword")
+        sword = UniqueItem(name="sword", message_retr="Here is a good, basic sword, my friend.")
         forge.add_watch(lambda: len([o for o in forge.items if o.data == iron.data]) > 0 and
                         sword not in forge.items,  # TODO find out why things break without this
                         lambda watchee: [map(lambda x: x.remove(), [o for o in watchee.items if o.data == iron.data]),
                                          forge.add_child(sword)])
 
-        dragon = GameItem("fierce-dragon", is_locked=True)
-        guarded_door.add_child(dragon)
-        dragon.message = "Come closer, for I am hungry!"
-        princess = GameItem("Pissy-the-Princess", is_locked=True)
-        princess.message = "I'm afraid of the dragon!"
-        guarded_door.add_child(princess)
+        dragon = GameItem("fierce-dragon", is_locked=True, message="Come closer, for I am hungry!",
+                          message_dele="You have slayed the dragon, the princess is yours... if she's in a good mood!")
+        castle.add_child(dragon)
+        princess = GameItem("Pissy-the-Princess", is_locked=True, message = "I'm afraid of the dragon!")
+        castle.add_child(princess)
 
         def kill_dragon(watchee):
             map(GameItem.remove, [o for o in watchee.items if o.data == sword.data])
             dragon.remove(force=True)
             princess.message = "I'm pissed, you never send me any love letters :("
-            guarded_door.add_watch(lambda: len([i for i in guarded_door.items
+            castle.add_watch(lambda: len([i for i in castle.items
                                                 if i.data.upper() == "i love you".upper()]) > 0,
                                    lambda w: [setattr(princess, 'message',
                                               "Nice. My bed is this way, you naughty knight!"),
                                               setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
-        guarded_door.add_watch(lambda: [o for o in guarded_door.items if o.data == sword.data], kill_dragon)
+        castle.add_watch(lambda: [o for o in castle.items if o.data == sword.data], kill_dragon)
 
 
 class GameRoot(GameItem):
@@ -384,11 +426,13 @@ class FTPserverThread(threading.Thread):
         requested_url = cmd[5:-2]
         base_url = self.cwd
         item = self.root.get_item_by_url(requested_url, base_url)
+
         if item is not None:
+            message = item.message_dele or "File deleted."
             was_deleted = item.remove()
 
         if was_deleted:
-            self.conn.send('250 File deleted.\r\n')
+            self.conn.send('250 ' + message +'\r\n')
         else:
             self.conn.send('450 Not allowed.\r\n')
 
@@ -411,7 +455,7 @@ class FTPserverThread(threading.Thread):
         item = self.root.get_item_by_url(requested_url, base_url)
         if item is None:
             self.conn.send('450 Access Denied.\r\n')
-        if item.is_locked and item.message is not None:
+        elif item.is_locked and item.message is not None:
             self.conn.send('450 ' + item.message + '\r\n')
         else:
             print 'Downloading:' + requested_url
@@ -427,7 +471,8 @@ class FTPserverThread(threading.Thread):
             except socket.error:
                 print 'Send failed: ' + sent
             self.stop_datasock()
-            self.conn.send('226 Transfer complete.\r\n')
+            message = item.message_retr or "Transfer complete."
+            self.conn.send('226 ' + message + '\r\n')
 
     def ftp_size(self, cmd):
         self.conn.send('213 100\r\n')
@@ -457,9 +502,11 @@ class FTPserverThread(threading.Thread):
 
         (file_name, target) = self.root.get_item_and_location_by_url(file_path, self.cwd)
 
+        message = target.message_stor or "Transfer complete."
+
         new_item = GameItem(name=file_name, data=big_string)
         self.cwd.add_child(new_item)
-        self.conn.send('226 Transfer complete.\r\n')
+        self.conn.send('226 ' + message + '\r\n')
 
 
 class FTPserver(threading.Thread):
