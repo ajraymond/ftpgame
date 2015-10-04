@@ -131,31 +131,14 @@ class GameItem(object):
 
 # a regular game item, with an auto-generated unique key
 class UniqueItem(GameItem):
-    #TODO fix the parameters (see StackOverflow comment in this file)
-    def __init__(self, name, is_dir=False, is_locked=False, contains=None, message_retr=None, message_dele=None):
-        GameItem.__init__(self, name, is_dir, is_locked, contains, message_retr=message_retr, message_dele=message_dele,
-                          data=str(uuid.uuid4()))
+    def __init__(self, *args, **kwargs):
+        kwargs['data'] = str(uuid.uuid4())
+        super(UniqueItem, self).__init__(*args, **kwargs)
 
-
-# a level (scene?) with ropes and a locked door; when the ropes are deleted, the door opens
+#empty
 class Level0(GameItem):
     def __init__(self):
         GameItem.__init__(self, name="0", is_dir=True)
-        self.add_child(GameItem("rope-1", data='rope1'))
-        self.add_child(GameItem("rope-2", data='rope2'))
-        self.add_child(GameItem("door", is_dir=True, is_locked=True))
-
-    # TODO I think this can be fixed + made prettier all over the place
-    # http://stackoverflow.com/questions/5031711/python-cleanest-way-to-override-init-where-an-optional-kwarg-must-be-used
-    def remove_child(self, item):
-        ret_val = GameItem.remove_child(self, item)
-        number_of_ropes = len([o for o in self.items if o.name.startswith("rope")])
-        if number_of_ropes == 0:
-            for x in [o for o in self.items if o.name.startswith("door")]:
-                x.name = "door-open"
-                x.is_locked = False
-        return ret_val
-
 
 # a single room
 class Level1(GameItem):
