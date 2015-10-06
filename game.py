@@ -13,14 +13,13 @@ local_port = 21
 
 
 class GameItem(object):
-    def __init__(self, name, is_dir=False, is_locked=False, contains=None, data="",
+    def __init__(self, name, is_dir=False, is_locked=False, contains=None, watches=None, data="",
                  message=None, message_stor=None, message_dele=None, message_retr=None):
-        if not contains:
-            contains = []
         self._name = name
 
         self.parent = None
-        self.items = contains
+        self._items = contains or []
+        map(lambda i: setattr(i, 'parent', self), self._items)
 
         self.is_dir = is_dir
         self.is_locked = is_locked
@@ -32,7 +31,7 @@ class GameItem(object):
         self._message_retr = message_retr
 
         # array of tuples (action, condition)
-        self.watches = []
+        self._watches = watches or []
 
     def __str__(self):
         return "GameItem " + self.name
@@ -52,7 +51,7 @@ class GameItem(object):
         return self.parent.remove_child(self, force)
 
     def add_child(self, item):
-        self.items.append(item)
+        self._items.append(item)
         item.parent = self
         self.notify_observers()
 
@@ -84,28 +83,39 @@ class GameItem(object):
     @property
     def message_retr(self):
         """
-        Message sent to the user as the item is sucessfully downloaded.
+        Message sent to the user as the item is successfully downloaded.
         """
         return self._message_retr
 
+    @property
+    def items(self):
+        """
+        Items contained in this folder.
+        """
+        return self._items
+
+    @property
+    def watches(self):
+        return self._watches
+
     # returns true if (at least?) 1 item was deleted
     def remove_child(self, item, force=False):
-        old_item_count = len(self.items)
-        self.items = [o for o in self.items if (o.name != item.name or (o.is_locked and not force))]
-        item_was_deleted = len(self.items) < old_item_count
-        if item_was_deleted:
+        item_was_deleted = False
+        if item in self.items:
+            self.items.remove(item)
+            item_was_deleted = True
             self.notify_observers()
         return item_was_deleted
 
     # action is a function that takes the watched element as a parameter
     # condition is a function with no parameters
     def add_watch(self, condition, action):
-        self.watches.append((action, condition))
+        self.watches.append((condition, action))
 
     # TODO add event types?
     def notify_observers(self):
-        for (action, condition) in self.watches:
-            if condition():
+        for (condition, action) in self.watches:
+            if condition(self):
                 action(self)
 
     def get_item(self, path_list):
@@ -135,6 +145,61 @@ class UniqueItem(GameItem):
         kwargs['data'] = str(uuid.uuid4())
         super(UniqueItem, self).__init__(*args, **kwargs)
 
+class Room(GameItem):
+    def __init__(self, *args, **kwargs):
+        kwargs['is_dir'] = True
+        super(Room, self).__init__(*args, **kwargs)
+
+# hides all items except shiny ones until the room is lit
+class DarkRoom(Room):
+    def __init__(self, is_lit=False, *args, **kwargs):
+        self._is_lit = is_lit
+        super(DarkRoom, self).__init__(*args, **kwargs)
+
+    @property
+    def is_lit(self):
+        return self._is_lit
+
+    @is_lit.setter
+    def is_lit(self, value):
+        self._is_lit = value
+
+    @property
+    def items(self):
+        all_items = super(DarkRoom, self).items
+        if self.is_lit:
+            return all_items
+        else:
+            all_shiny_items = [o for o in all_items if getattr(o, 'is_shiny', False)]
+            return all_shiny_items
+
+    def all_items(self):
+        return super(DarkRoom, self).items
+
+    def get_item(self, path_list):
+        real_item = super(DarkRoom, self).get_item(path_list)
+        if self.is_lit or getattr(real_item, 'is_shiny', False):
+            return real_item
+        else:
+            return None
+
+# shiny items are visible even in dark rooms
+class ShinyObject(GameItem):
+
+    @property
+    def is_shiny(self):
+        return self._is_shiny
+
+    def __init__(self, *args, **kwargs):
+        self._is_shiny = True
+        super(ShinyObject, self).__init__(*args, **kwargs)
+
+    @property
+    def name(self):
+        # TODO self.parent.is_lit is kind of a weird approach
+        return super(ShinyObject, self).name + ("-lit" if self.parent.is_lit else "-unlit")
+
+
 #empty
 class Level0(GameItem):
     def __init__(self):
@@ -143,8 +208,19 @@ class Level0(GameItem):
 # a single room
 class Level1(GameItem):
     def __init__(self):
-        GameItem.__init__(self, name="1", is_dir=True)
-        self.add_child(GameItem(name="folder", is_dir=True, is_locked=True))
+        zippo = UniqueItem("zippo")
+        GameItem.__init__(self, name="1", is_dir=True, contains=[
+            GameItem(name="folder", is_dir=True, contains=[
+                Room(name="red-door"),
+                zippo
+            ]),
+            DarkRoom(name="green-door", contains=[
+                ShinyObject(name="candelabra"),
+                GameItem(name="secret-scroll", data="secret message!")
+            ], watches=[(lambda watchee: len([o for o in watchee.all_items() if o.data == zippo.data]) > 0,
+                         lambda watchee: setattr(watchee, 'is_lit', True))])
+        ])
+
 
 
 # a hierarchy of folders and items
@@ -169,7 +245,7 @@ class Level3(GameItem):
         door = GameItem("door", is_dir=True, is_locked=True)
         self.items.append(door)
 
-        self.add_watch(lambda: len([o for o in self.items if o.name.startswith("rope")]) == 0,
+        self.add_watch(lambda watchee: len([o for o in self.items if o.name.startswith("rope")]) == 0,
                        lambda watchee: setattr(door, 'is_locked', False),)
 
 
@@ -183,7 +259,7 @@ class Level4(GameItem):
 
         rusty_door = GameItem(name="rusty-door", is_dir=True, is_locked=True)
         self.add_child(rusty_door)
-        self.add_watch(lambda: padlock not in self.items,
+        self.add_watch(lambda watchee: padlock not in watchee.items,
                        lambda watchee: setattr(rusty_door, 'is_locked', False))
 
         golden_key = UniqueItem(name="golden-key")
@@ -191,7 +267,7 @@ class Level4(GameItem):
 
         golden_door = GameItem("golden-door", is_dir=True, is_locked=True)
         self.add_child(golden_door)
-        self.add_watch(lambda: len([o for o in self.items if golden_key.data == o.data]) > 0,
+        self.add_watch(lambda watchee: len([o for o in watchee.items if golden_key.data == o.data]) > 0,
                        lambda watchee: setattr(golden_door, 'is_locked', False))
 
         castle = GameItem("castle", is_dir=True, is_locked=True,
@@ -201,8 +277,8 @@ class Level4(GameItem):
                          message_dele="How dare you attack me! Hm, this loot really doesn't help me fight ba--")
         golden_door.add_child(guard)
         iron = UniqueItem(name="iron")
-        golden_door.add_watch(lambda: guard not in golden_door.items and
-                              len([o for o in golden_door.items if "iron" in o.name]) == 0,
+        golden_door.add_watch(lambda watchee: guard not in watchee.items and
+                                              len([o for o in watchee.items if "iron" in o.name]) == 0,
                               lambda watchee: [setattr(castle, 'is_locked', False), golden_door.add_child(iron)])
 
         forge = GameItem("forge", is_dir=True, message_stor="Let me see what you have given me...")
@@ -211,10 +287,10 @@ class Level4(GameItem):
                               message="Give me some iron and I will forge you a sword!")
         forge.add_child(blacksmith)
         sword = UniqueItem(name="sword", message_retr="Here is a good, basic sword, my friend.")
-        forge.add_watch(lambda: len([o for o in forge.items if o.data == iron.data]) > 0 and
+        forge.add_watch(lambda watchee: len([o for o in watchee.items if o.data == iron.data]) > 0 and
                         sword not in forge.items,  # TODO find out why things break without this
                         lambda watchee: [map(lambda x: x.remove(), [o for o in watchee.items if o.data == iron.data]),
-                                         forge.add_child(sword)])
+                                         watchee.add_child(sword)])
 
         dragon = GameItem("fierce-dragon", is_locked=True, message="Come closer, for I am hungry!",
                           message_dele="You have slayed the dragon, the princess is yours... if she's in a good mood!")
@@ -226,19 +302,18 @@ class Level4(GameItem):
             map(GameItem.remove, [o for o in watchee.items if o.data == sword.data])
             dragon.remove(force=True)
             princess.message = "I'm pissed, you never send me any love letters :("
-            castle.add_watch(lambda: len([i for i in castle.items
-                                                if i.data.upper() == "i love you".upper()]) > 0,
-                                   lambda w: [setattr(princess, 'message',
+            castle.add_watch(lambda watchee: len([i for i in watchee.items
+                                                  if i.data.upper() == "i love you".upper()]) > 0,
+                             lambda watchee: [setattr(princess, 'message',
                                               "Nice. My bed is this way, you naughty knight!"),
                                               setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
-        castle.add_watch(lambda: [o for o in castle.items if o.data == sword.data], kill_dragon)
+        castle.add_watch(lambda watchee: [o for o in watchee.items if o.data == sword.data], kill_dragon)
 
 
 class GameRoot(GameItem):
     def __init__(self):
         GameItem.__init__(self, name="", is_dir=True)
         self.NUM_LEVELS = 5
-        self.items = []
         for i in range(self.NUM_LEVELS):
             self.add_child(globals()['Level' + str(i)]())  # pffft
 
