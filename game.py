@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 # coding: utf-8
 
 import socket
@@ -35,7 +34,6 @@ class GameItem(object):
 
     def __str__(self):
         return "GameItem " + self.name
-
 
     @property
     def name(self):
@@ -154,12 +152,14 @@ class UniqueItem(GameItem):
     # this is convenient for conditions, because [] == False
     @staticmethod
     def unique_item_in_folder(item_data):
-        return lambda(folder): [o for o in folder.items if o.data == item_data]
+        return lambda folder: [o for o in folder.items if o.data == item_data]
+
 
 class Room(GameItem):
     def __init__(self, *args, **kwargs):
         kwargs['is_dir'] = True
         super(Room, self).__init__(*args, **kwargs)
+
 
 # hides all items except shiny ones until the room is lit
 class DarkRoom(Room):
@@ -191,6 +191,7 @@ class DarkRoom(Room):
         else:
             return None
 
+
 # shiny items are visible even in dark rooms
 class ShinyItem(GameItem):
 
@@ -212,13 +213,14 @@ class ShinyItem(GameItem):
     # this is convenient for conditions, because [] == False
     @staticmethod
     def shiny_item_in_folder(item_data):
-        return lambda(folder): [o for o in folder.all_items if o.data == item_data]
+        return lambda folder: [o for o in folder.all_items if o.data == item_data]
 
 
-#empty
+# empty
 class Level0(GameItem):
     def __init__(self):
         GameItem.__init__(self, name="0", is_dir=True)
+
 
 # a single room
 class Level1(GameItem):
@@ -235,7 +237,6 @@ class Level1(GameItem):
             ], watches=[(ShinyItem.shiny_item_in_folder(zippo.data),
                          lambda watchee: setattr(watchee, 'is_lit', True))])
         ])
-
 
 
 # a hierarchy of folders and items
@@ -287,14 +288,15 @@ class Level4(GameItem):
                        lambda watchee: setattr(golden_door, 'is_locked', False))
 
         castle = GameItem("castle", is_dir=True, is_locked=True,
-                                message_stor="Is this a gift for me? Is this a letter at last?!")
+                          message_stor="Is this a gift for me? Is this a letter at last?!")
         golden_door.add_child(castle)
         guard = GameItem("weak-guard",
                          message_dele="How dare you attack me! Hm, this loot really doesn't help me fight ba--")
         golden_door.add_child(guard)
         iron = UniqueItem(name="iron")
         golden_door.add_watch(lambda watchee: guard not in watchee.items and
-                                              iron not in watchee.items, # without this, we're stuck in a add_child -> notification loop
+                                              iron not in watchee.items, # without this, we're stuck in an
+                                                                         #  add_child -> notification loop
                               lambda watchee: [setattr(castle, 'is_locked', False), golden_door.add_child(iron)])
 
         forge = GameItem("forge", is_dir=True, message_stor="Let me see what you have given me...")
@@ -303,27 +305,27 @@ class Level4(GameItem):
                               message="Give me some iron and I will forge you a sword!")
         forge.add_child(blacksmith)
         sword = UniqueItem(name="sword", message_retr="Here is a good, basic sword, my friend.")
-        forge.add_watch(lambda(watchee): UniqueItem.unique_item_in_folder(iron.data)(watchee) and
-                                         sword not in forge.items, # without this last item, we're stuck
-                                                                   # in a add_child -> notification loop
-                        lambda watchee: [map(lambda x: x.remove(), UniqueItem.unique_item_in_folder(iron.data)(watchee)),
+        forge.add_watch(lambda watchee: UniqueItem.unique_item_in_folder(iron.data)(watchee) and
+                                        sword not in forge.items, # otherwise, stuck in add_child -> notification loop
+                        lambda watchee: [map(lambda x: x.remove(),
+                                             UniqueItem.unique_item_in_folder(iron.data)(watchee)),
                                          watchee.add_child(sword)])
 
         dragon = GameItem("fierce-dragon", is_locked=True, message="Come closer, for I am hungry!",
                           message_dele="You have slayed the dragon, the princess is yours... if she's in a good mood!")
         castle.add_child(dragon)
-        princess = GameItem("Pissy-the-Princess", is_locked=True, message = "I'm afraid of the dragon!")
+        princess = GameItem("Pissy-the-Princess", is_locked=True, message="I'm afraid of the dragon!")
         castle.add_child(princess)
 
         def kill_dragon(watchee):
             map(GameItem.remove, [o for o in watchee.items if o.data == sword.data])
             dragon.remove(force=True)
             princess.message = "I'm pissed, you never send me any love letters :("
-            castle.add_watch(lambda watchee: len([i for i in watchee.items
-                                                  if i.data.upper() == "i love you".upper()]) > 0,
-                             lambda watchee: [setattr(princess, 'message',
-                                              "Nice. My bed is this way, you naughty knight!"),
-                                              setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
+            castle.add_watch(lambda inner_watchee: len([i for i in inner_watchee.items
+                                                        if i.data.upper() == "i love you".upper()]) > 0,
+                             lambda inner_watchee: [setattr(princess, 'message',
+                                                            "Nice. My bed is this way, you naughty knight!"),
+                                                    setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
         castle.add_watch(UniqueItem.unique_item_in_folder(sword.data), kill_dragon)
 
 
@@ -357,9 +359,6 @@ class GameRoot(GameItem):
         return m.group('filename'), target
 
 
-sharedGame = GameRoot()
-
-
 def to_list_item(o):
     access = "---------" if o.is_locked else 'rwxrwxrwx'
     d = o.is_dir and 'd' or '-'
@@ -368,7 +367,8 @@ def to_list_item(o):
 
 
 class FTPserverThread(threading.Thread):
-    def __init__(self, (conn, addr)):
+    def __init__(self, sock):
+        (conn, addr) = sock
         self.conn = conn
         self.addr = addr
         self.rest = False
@@ -378,53 +378,61 @@ class FTPserverThread(threading.Thread):
         threading.Thread.__init__(self)
 
     def run(self):
-        self.conn.send('220 Welcome!\r\n')
+        self.write('220 Welcome!\r\n')
         while True:
-            cmd = self.conn.recv(256)
+            cmd = self.read()
             if not cmd:
                 break
             else:
-                print 'Received:', cmd
+                print('Received:', cmd)
                 try:
                     func = getattr(self, "ftp_" + cmd[:4].strip().lower())
                     func(cmd)
-                except Exception, e:
-                    print 'ERROR:', e
+                except Exception as e:
+                    print('ERROR:', e)
                     # traceback.print_exc()
-                    self.conn.send('500 Sorry.\r\n')
+                    self.write('500 Sorry.\r\n')
+
+    def write(self, message, on_datasock=False):
+        channel = self.conn if not on_datasock else self.datasock
+        return channel.send(str.encode(message, "utf-8"))
+
+    def read(self, buffersize=256, on_datasock=False):
+        channel = self.conn if not on_datasock else self.datasock
+        return channel.recv(buffersize).decode()
 
     def ftp_syst(self, cmd):
-        self.conn.send('215 UNIX Type: L8\r\n')
+        self.write('215 UNIX Type: L8\r\n')
 
     def ftp_opts(self, cmd):
         if cmd[5:-2].upper() == 'UTF8 ON':
-            self.conn.send('200 OK.\r\n')
+            self.write('200 OK.\r\n')
         else:
-            self.conn.send('451 Sorry.\r\n')
+            self.write('451 Sorry.\r\n')
 
     def ftp_user(self, cmd):
-        self.conn.send('331 OK.\r\n')
+        self.write('331 OK.\r\n')
 
     def ftp_pass(self, cmd):
-        self.conn.send('230 OK.\r\n')
-        # self.conn.send('530 Incorrect.\r\n')
+        self.write('230 OK.\r\n')
+        # self.write('530 Incorrect.\r\n')
 
     def ftp_quit(self, cmd):
-        self.conn.send('221 Goodbye.\r\n')
+        self.write('221 Goodbye.\r\n')
 
     def ftp_noop(self, cmd):
-        self.conn.send('200 OK.\r\n')
+        self.write('200 OK.\r\n')
 
     def ftp_type(self, cmd):
         self.mode = cmd[5]
-        self.conn.send('200 Binary mode.\r\n')
+        self.write('200 Binary mode.\r\n')
 
     def ftp_xpwd(self, cmd):
         self.ftp_pwd(cmd)
 
     def ftp_pwd(self, cmd):
         url = self.cwd.get_url()
-        self.conn.send('257 \"%s\"\r\n' % url)
+        self.write('257 \"%s\"\r\n' % url)
 
     def ftp_cdup(self, cmd):
         self.ftp_cwd("CWD ..\r\n")
@@ -439,12 +447,12 @@ class FTPserverThread(threading.Thread):
             item = self.root.get_item_by_url(requested_dir, base_url)
 
         if item is not None and item.is_dir and not item.is_locked:
-            self.conn.send('250 OK.\r\n')
+            self.write('250 OK.\r\n')
             self.cwd = item
         else:
             # returning Access Denied because a more descriptive message
             # might reveal what is hiding, say, behind a closed door
-            self.conn.send('550 Access Denied, Dude.\r\n')
+            self.write('550 Access Denied, Dude.\r\n')
 
     def ftp_port(self, cmd):
         if self.pasv_mode:
@@ -453,7 +461,7 @@ class FTPserverThread(threading.Thread):
         l = cmd[5:].split(',')
         self.dataAddr = '.'.join(l[:4])
         self.dataPort = (int(l[4]) << 8) + int(l[5])
-        self.conn.send('200 Get port.\r\n')
+        self.write('200 Get port.\r\n')
 
     def ftp_pasv(self, cmd):  # from http://goo.gl/3if2U
         self.pasv_mode = True
@@ -461,14 +469,14 @@ class FTPserverThread(threading.Thread):
         self.servsock.bind((local_ip, 0))
         self.servsock.listen(1)
         ip, port = self.servsock.getsockname()
-        print 'open', ip, port
-        self.conn.send('227 Entering Passive Mode (%s,%u,%u).\r\n' %
-                       (','.join(ip.split('.')), port >> 8 & 0xFF, port & 0xFF))
+        print('open', ip, port)
+        self.write('227 Entering Passive Mode (%s,%u,%u).\r\n' %
+                   (','.join(ip.split('.')), port >> 8 & 0xFF, port & 0xFF))
 
     def start_datasock(self):
         if self.pasv_mode:
             self.datasock, addr = self.servsock.accept()
-            print 'connect:', addr
+            print('connect:', addr)
         else:
             self.datasock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.datasock.connect((self.dataAddr, self.dataPort))
@@ -479,21 +487,21 @@ class FTPserverThread(threading.Thread):
             self.servsock.close()
 
     def ftp_list(self, cmd):
-        self.conn.send('150 Here comes the directory listing.\r\n')
+        self.write('150 Here comes the directory listing.\r\n')
         self.start_datasock()
         # TODO do something if cwd doesn't exist/isn't accessible (unlikely?)
         for o in self.cwd.items:
-            self.datasock.send(to_list_item(o) + '\r\n')
+            self.write(to_list_item(o) + '\r\n', on_datasock=True)
         self.stop_datasock()
-        self.conn.send('226 Directory send OK.\r\n')
+        self.write('226 Directory send OK.\r\n')
 
     def ftp_mkd(self, cmd):
         # TODO
-        self.conn.send('451 Not implemented.\r\n')
+        self.write('451 Not implemented.\r\n')
 
     def ftp_rmd(self, cmd):
         # TODO
-        self.conn.send('451 Not implemented.\r\n')
+        self.write('451 Not implemented.\r\n')
 
     def ftp_dele(self, cmd):
         was_deleted = False
@@ -502,73 +510,75 @@ class FTPserverThread(threading.Thread):
         base_url = self.cwd
         item = self.root.get_item_by_url(requested_url, base_url)
 
+        message = ''
         if item is not None:
             message = item.message_dele or "File deleted."
             was_deleted = item.remove()
 
         if was_deleted:
-            self.conn.send('250 ' + message +'\r\n')
+            self.write('250 ' + message + '\r\n')
         else:
-            self.conn.send('450 Not allowed.\r\n')
+            self.write('450 Not allowed.\r\n')
 
     def ftp_rnfr(self, cmd):
         # TODO
-        self.conn.send('451 Not implemented.\r\n')
+        self.write('451 Not implemented.\r\n')
 
     def ftp_rnto(self, cmd):
         # TODO
-        self.conn.send('451 Not implemented.\r\n')
+        self.write('451 Not implemented.\r\n')
 
     def ftp_rest(self, cmd):
         self.pos = int(cmd[5:-2])
         self.rest = True
-        self.conn.send('250 File position reseted.\r\n')
+        self.write('250 File position reset.\r\n')
 
     def ftp_retr(self, cmd):
         requested_url = cmd[5:-2]
         base_url = self.cwd
         item = self.root.get_item_by_url(requested_url, base_url)
         if item is None:
-            self.conn.send('450 Access Denied.\r\n')
+            self.write('450 Access Denied.\r\n')
         elif item.is_locked and item.message is not None:
-            self.conn.send('450 ' + item.message + '\r\n')
+            self.write('450 ' + item.message + '\r\n')
         else:
-            print 'Downloading:' + requested_url
+            print('Downloading:' + requested_url)
             # TODO check if we're in binary mode with self.mode=='I':
-            self.conn.send('150 Opening data connection.\r\n')
+            self.write('150 Opening data connection.\r\n')
             # TODO check if RESTore mode? unsure
             # TODO break down into pieces, like 1024 bytes...
             data = item.data
             self.start_datasock()
             sent = "(unknown)"
+            # TODO should check if we were able to send everything
             try:
-                sent = self.datasock.sendall(data)
+                sent = self.write(data, on_datasock=True)
             except socket.error:
-                print 'Send failed: ' + sent
+                print('Send failed: ' + sent)
             self.stop_datasock()
             message = item.message_retr or "Transfer complete."
-            self.conn.send('226 ' + message + '\r\n')
+            self.write('226 ' + message + '\r\n')
 
     def ftp_size(self, cmd):
-        self.conn.send('213 100\r\n')
+        self.write('213 100\r\n')
 
     def ftp_abor(self, cmd):
-        self.conn.send('426 Never gonna give you up.\r\n')
+        self.write('426 Never gonna give you up.\r\n')
 
     def ftp_site(self, cmd):
-        self.conn.send('200 OK whatever man.\r\n')
+        self.write('200 OK whatever man.\r\n')
 
     def ftp_stor(self, cmd):
         file_path = cmd[5:-2]
-        print 'Uploading: ' + file_path
+        print('Uploading: ' + file_path)
         # TODO check if binary mode
         # TODO check if cwd is still writeable (unlikely?)
         # TODO check if file already exists there
-        self.conn.send('150 Opening data connection.\r\n')
+        self.write('150 Opening data connection.\r\n')
         self.start_datasock()
         all_data = []
         while True:
-            data = self.datasock.recv(1024)
+            data = self.read(1024, on_datasock=True)
             if not data:
                 break
             all_data.append(data)
@@ -581,7 +591,7 @@ class FTPserverThread(threading.Thread):
 
         new_item = GameItem(name=file_name, data=big_string)
         self.cwd.add_child(new_item)
-        self.conn.send('226 ' + message + '\r\n')
+        self.write('226 ' + message + '\r\n')
 
 
 class FTPserver(threading.Thread):
@@ -602,9 +612,10 @@ class FTPserver(threading.Thread):
 
 
 if __name__ == '__main__':
+    sharedGame = GameRoot()
     ftp = FTPserver()
     ftp.daemon = True
     ftp.start()
-    print 'On', local_ip, ':', local_port
-    raw_input('Enter to end...\n')
+    print('On', local_ip, ':', local_port)
+    input('Enter to end...\n')
     ftp.stop()
