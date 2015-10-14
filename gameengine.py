@@ -24,7 +24,7 @@ class GameItem(object):
         self.type = type
 
         self.parent = None
-        self.content = content or []
+        self.content = content or ([] if type == ItemType.room else "")
         if isinstance(content, list):
             for x in self.content:
                 x.parent = self
@@ -111,10 +111,6 @@ class GameItem(object):
         return self._message_retr
 
     @property
-    def all_items(self):
-        return self.contains
-
-    @property
     def watches(self):
         return self._watches
 
@@ -166,6 +162,15 @@ class DarkRoom(Room):
         self.is_lit = is_lit
         super(DarkRoom, self).__init__(*args, **kwargs)
 
+    def add_child(self, item):
+        self.all_content.append(item)
+        item.parent = self
+        self.notify_observers()
+
+    @property
+    def all_content(self):
+        return self._content
+
     @property
     def content(self):
         all_items = self._content
@@ -203,7 +208,7 @@ class ShinyItem(GameItem):
     # this is convenient for conditions, because [] == False
     @staticmethod
     def shiny_item_in_folder(item_data):
-        return lambda folder: [o for o in folder.all_items if o.content == item_data]
+        return lambda folder: [o for o in folder.all_content if o.content == item_data]
 
 
 class GameEngine(GameItem):
