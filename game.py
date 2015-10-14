@@ -26,9 +26,9 @@ class FTPserverThread(threading.Thread):
 
     def _to_list_item(self, o):
         access = "---------" if o.is_locked else 'rwxrwxrwx'
-        d = o.is_dir and 'd' or '-'
+        d = o.type == gameengine.ItemType.room and 'd' or '-'
         ftime = time.strftime(' %b %d %H:%M ', time.localtime())
-        return d + access + ' 1 user group ' + str(len(o.data)) + ' ' + ftime + o.name
+        return d + access + ' 1 user group ' + str(len(o.content)) + ' ' + ftime + o.name
 
 
     def run(self):
@@ -100,7 +100,7 @@ class FTPserverThread(threading.Thread):
             base_url = self.cwd
             item = self.root.get_item_by_url(requested_dir, base_url)
 
-        if item is not None and item.is_dir and not item.is_locked:
+        if item is not None and item.type == gameengine.ItemType.room and not item.is_locked:
             self.write('250 OK.\r\n')
             self.cwd = item
         else:
@@ -113,8 +113,8 @@ class FTPserverThread(threading.Thread):
             self.servsock.close()
             self.pasv_mode = False
         l = cmd[5:].split(',')
-        self.dataAddr = '.'.join(l[:4])
-        self.dataPort = (int(l[4]) << 8) + int(l[5])
+        self.data_addr = '.'.join(l[:4])
+        self.data_port = (int(l[4]) << 8) + int(l[5])
         self.write('200 Get port.\r\n')
 
     def ftp_pasv(self, cmd):  # from http://goo.gl/3if2U
@@ -133,7 +133,7 @@ class FTPserverThread(threading.Thread):
             print('connect:', addr)
         else:
             self.datasock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.datasock.connect((self.dataAddr, self.dataPort))
+            self.datasock.connect((self.data_addr, self.data_port))
 
     def stop_datasock(self):
         self.datasock.close()
@@ -144,7 +144,7 @@ class FTPserverThread(threading.Thread):
         self.write('150 Here comes the directory listing.\r\n')
         self.start_datasock()
         # TODO do something if cwd doesn't exist/isn't accessible (unlikely?)
-        for o in self.cwd.items:
+        for o in self.cwd.content:
             self.write(self._to_list_item(o) + '\r\n', on_datasock=True)
         self.stop_datasock()
         self.write('226 Directory send OK.\r\n')
@@ -201,7 +201,7 @@ class FTPserverThread(threading.Thread):
             self.write('150 Opening data connection.\r\n')
             # TODO check if RESTore mode? unsure
             # TODO break down into pieces, like 1024 bytes...
-            data = item.data
+            data = item.content
             self.start_datasock()
             sent = "(unknown)"
             # TODO should check if we were able to send everything
@@ -243,7 +243,7 @@ class FTPserverThread(threading.Thread):
 
         message = target.message_stor or "Transfer complete."
 
-        new_item = gameengine.GameItem(name=file_name, data=big_string)
+        new_item = gameengine.GameItem(name=file_name, content=big_string)
         self.cwd.add_child(new_item)
         self.write('226 ' + message + '\r\n')
 
