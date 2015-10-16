@@ -191,10 +191,11 @@ class FTPserverThread(threading.Thread):
         requested_url = cmd[5:-2]
         base_url = self.cwd
         item = self.root.get_item_by_url(requested_url, base_url)
+
         if item is None:
             self.write('450 Access Denied.\r\n')
-        elif item.is_locked and item.message is not None:
-            self.write('450 ' + item.message + '\r\n')
+        elif item.is_locked and isinstance(item.content, str):
+            self.write('450 ' + item.content + '\r\n')
         else:
             print('Downloading:' + requested_url)
             # TODO check if we're in binary mode with self.mode=='I':

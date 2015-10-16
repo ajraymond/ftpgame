@@ -1,10 +1,5 @@
-# TODO
-# TODO
-# TODO
-# change is_dir to an item.type
-# change content to be either data (file), message (NPC) or a list (other files)
-
-# monitor the list contents instead of using add_child, delete_child
+# TODO high level:
+# monitor the list contents (+ have event types?!) instead of using add_child, delete_child
 
 import re
 import uuid
@@ -19,7 +14,7 @@ class ItemType(Enum):
 
 class GameItem(object):
     def __init__(self, name, type=ItemType.regular, is_locked=False, content=None, watches=None,
-                 message=None, message_stor=None, message_dele=None, message_retr=None):
+                 message_stor=None, message_dele=None, message_retr=None):
         self._name = name
         self.type = type
 
@@ -31,7 +26,6 @@ class GameItem(object):
 
         self.is_locked = is_locked
 
-        self._message = message
         self._message_stor = message_stor
         self._message_dele = message_dele
         self._message_retr = message_retr
@@ -77,17 +71,6 @@ class GameItem(object):
             return "/" + self.name
         else:
             return self.parent.get_url() + "/" + self.name
-
-    @property
-    def message(self):
-        """
-        Message sent to the user when trying to retrieve an inaccessible item (e.g. talking to an NPC).
-        """
-        return self._message
-
-    @message.setter
-    def message(self, new_message):
-        self._message = new_message
 
     @property
     def message_stor(self):
@@ -153,7 +136,14 @@ class UniqueItem(GameItem):
 class Room(GameItem):
     def __init__(self, *args, **kwargs):
         kwargs['type'] = ItemType.room
-        super(Room, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
+
+class NPC(GameItem):
+    def __init__(self, *args, content="", **kwargs):
+        kwargs['content'] = content
+        kwargs['is_locked'] = True
+        super().__init__(*args, **kwargs)
 
 
 # hides all items except shiny ones until the room is lit
@@ -245,7 +235,7 @@ class GameEngine(GameItem):
         golden_castle_gate = Room("golden-castle-gate", is_locked=True)
         princess_story.add_child(golden_castle_gate)
         princess_story.add_watch(UniqueItem.unique_item_in_folder(golden_key.content),
-                       lambda watchee: setattr(golden_castle_gate, 'is_locked', False))
+                                 lambda watchee: setattr(golden_castle_gate, 'is_locked', False))
 
         castle = Room("castle", is_locked=True,
                       message_stor="Is this a gift for me? Is this a letter at last?!")
@@ -261,30 +251,31 @@ class GameEngine(GameItem):
 
         forge = Room("forge", message_stor="Let me see what you have given me...")
         princess_story.add_child(forge)
-        blacksmith = GameItem("Godor-the-blacksmith", is_locked=True,
-                              message="Give me some iron and I will forge you a sword!")
+        blacksmith = NPC("Godor-the-blacksmith",
+                         content="Give me some iron and I will forge you a sword!")
         forge.add_child(blacksmith)
         sword = UniqueItem(name="sword", message_retr="Here is a good, basic sword, my friend.")
         forge.add_watch(lambda watchee: UniqueItem.unique_item_in_folder(iron.content)(watchee) and
-                                        sword not in forge.content,  # otherwise, stuck in add_child -> notification loop
+                                        sword not in forge.content,
+                        # otherwise, stuck in add_child -> notification loop
                         lambda watchee: [map(lambda x: x.remove(),
                                              UniqueItem.unique_item_in_folder(iron.content)(watchee)),
                                          watchee.add_child(sword)])
 
-        dragon = GameItem("fierce-dragon", is_locked=True, message="Come closer, for I am hungry!",
-                          message_dele="You have slayed the dragon, the princess is yours... if she's in a good mood!")
+        dragon = NPC("fierce-dragon", is_locked=True, content="Come closer, for I am hungry!",
+                     message_dele="You have slayed the dragon, the princess is yours... if she's in a good mood!")
         castle.add_child(dragon)
-        princess = GameItem("Pissy-the-Princess", is_locked=True, message="I'm afraid of the dragon!")
+        princess = NPC("Pissy-the-Princess", is_locked=True, content="I'm afraid of the dragon!")
         castle.add_child(princess)
 
         def kill_dragon(watchee):
             map(GameItem.remove, [o for o in watchee.content if o.content == sword.content])
             dragon.remove(force=True)
-            princess.message = "I'm pissed, you never send me any love letters :("
+            princess.content = "I'm pissed, you never send me any love letters :("
             castle.add_watch(lambda inner_watchee: len([i for i in inner_watchee.content
                                                         if isinstance(i.content, str) and
                                                         i.content.upper() == "i love you".upper()]) > 0,
-                             lambda inner_watchee: [setattr(princess, 'message',
+                             lambda inner_watchee: [setattr(princess, 'content',
                                                             "Nice. My bed is this way, you naughty knight!"),
                                                     setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
 
