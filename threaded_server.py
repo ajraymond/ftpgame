@@ -6,22 +6,17 @@ import time
 
 import gameengine
 
-allow_delete = False
-local_ip = '127.0.0.1'
-local_port = 21
-
-
-
 
 class FTPserverThread(threading.Thread):
-    def __init__(self, sock):
+    def __init__(self, gameRoot, sock, host):
         (conn, addr) = sock
         self.conn = conn
         self.addr = addr
         self.rest = False
         self.pasv_mode = False
-        self.root = sharedGame
+        self.root = gameRoot
         self.cwd = self.root
+        self.host = host
         threading.Thread.__init__(self)
 
     def _to_list_item(self, o):
@@ -120,7 +115,7 @@ class FTPserverThread(threading.Thread):
     def ftp_pasv(self, cmd):  # from http://goo.gl/3if2U
         self.pasv_mode = True
         self.servsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.servsock.bind((local_ip, 0))
+        self.servsock.bind((self.host, 0))
         self.servsock.listen(1)
         ip, port = self.servsock.getsockname()
         print('open', ip, port)
@@ -250,27 +245,20 @@ class FTPserverThread(threading.Thread):
 
 
 class FTPserver(threading.Thread):
-    def __init__(self):
+    def __init__(self, engine, host, port):
+        self.host = host
+        self.engine = engine
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind((local_ip, local_port))
+        self.sock.bind((host, port))
         threading.Thread.__init__(self)
 
     def run(self):
         self.sock.listen(5)
         while True:
-            th = FTPserverThread(self.sock.accept())
+            th = FTPserverThread(self.engine, self.sock.accept(), self.host)
             th.daemon = True
             th.start()
 
     def stop(self):
         self.sock.close()
-
-
-if __name__ == '__main__':
-    sharedGame = gameengine.GameEngine()
-    ftp = FTPserver()
-    ftp.daemon = True
-    ftp.start()
-    print('On', local_ip, ':', local_port)
-    input('Enter to end...\n')
-    ftp.stop()
