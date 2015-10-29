@@ -4,7 +4,7 @@ import operator
 import io
 from aioftp import AbstractPathIO
 from aioftp.server import User, Permission
-from gameengine import GameItem, Room, ItemType
+from gameengine import GameItem, Room, ItemKind
 
 
 class GameUser(User):
@@ -12,8 +12,9 @@ class GameUser(User):
         super().__init__(*args, **kwargs)
         self.root = engine
 
-    def get_node(self, path): # argh this is a duplicate of get_node in other class
+    def get_node(self, path):  # argh this is a duplicate of get_node in other class
         nodes = [self.root]
+        node = None
         for part in path.parts:
             if not isinstance(nodes, list):
                 return
@@ -29,7 +30,7 @@ class GameUser(User):
         node = self.get_node(path)
 
         is_locked = False
-        if not node is None:
+        if node is not None:
             is_locked = node.is_locked
 
         return Permission(path, readable=not is_locked, writable=not is_locked)
@@ -56,7 +57,7 @@ class GamePathIO(AbstractPathIO):
         return repr(self.root)
 
     def get_node(self, path):
-
+        node = None
         nodes = [self.root]
         for part in path.parts:
 
@@ -86,13 +87,13 @@ class GamePathIO(AbstractPathIO):
     def is_dir(self, path):
 
         node = self.get_node(path)
-        return not (node is None or node.type != ItemType.room)
+        return not (node is None or node.kind != ItemKind.room)
 
     @asyncio.coroutine
     def is_file(self, path):
 
         node = self.get_node(path)
-        return not (node is None or node.type == ItemType.room)
+        return not (node is None or node.kind == ItemKind.room)
 
     @asyncio.coroutine
     def mkdir(self, path, *, parents=False):
@@ -108,7 +109,7 @@ class GamePathIO(AbstractPathIO):
 
                 raise FileNotFoundError
 
-            elif not parent.type == ItemType.room:
+            elif not parent.kind == ItemKind.room:
 
                 raise FileExistsError
 
@@ -118,6 +119,7 @@ class GamePathIO(AbstractPathIO):
         else:
 
             nodes = [self.root]
+            parent = self.root
             for part in path.parts:
 
                 if isinstance(nodes, list):
@@ -127,13 +129,15 @@ class GamePathIO(AbstractPathIO):
                         if node.name == part:
 
                             nodes = node.content
+                            parent = node
                             break
 
                     else:
 
-                        node = Room(name=part)
-                        nodes.add_child(node)
-                        nodes = node.content
+                        new_node = Room(name=part)
+                        parent.add_child(new_node)
+                        nodes = new_node.content
+                        parent = new_node
 
                 else:
 
@@ -147,7 +151,7 @@ class GamePathIO(AbstractPathIO):
 
             raise FileNotFoundError
 
-        elif node.type != ItemType.room:
+        elif node.kind != ItemKind.room:
 
             raise NotADirectoryError
 
@@ -167,7 +171,7 @@ class GamePathIO(AbstractPathIO):
 
             raise FileNotFoundError
 
-        elif node.type == ItemType.room:
+        elif node.kind == ItemKind.room:
 
             raise IsADirectoryError
 
@@ -179,7 +183,7 @@ class GamePathIO(AbstractPathIO):
     def list(self, path):
 
         node = self.get_node(path)
-        if node is None or node.type != ItemType.room:
+        if node is None or node.kind != ItemKind.room:
 
             return ()
 
@@ -226,7 +230,7 @@ class GamePathIO(AbstractPathIO):
 
             node = self.get_node(path)
             parent = self.get_node(path.parent)
-            if parent is None or parent.type != ItemType.room:
+            if parent is None or parent.kind != ItemKind.room:
 
                 raise FileNotFoundError
 
@@ -234,7 +238,7 @@ class GamePathIO(AbstractPathIO):
 
                 file_like = (io.BytesIO(), parent, path.name)
 
-            elif node.type != ItemType.regular:
+            elif node.kind != ItemKind.regular:
 
                 raise IsADirectoryError
 
@@ -244,7 +248,6 @@ class GamePathIO(AbstractPathIO):
                 node.remove()
 
                 if mode == "wb":
-
 
                     file_like = (io.BytesIO(), parent, path.name)
 
@@ -264,7 +267,7 @@ class GamePathIO(AbstractPathIO):
         if isinstance(file, tuple):
             (stream, parent, name) = file
             stream.write(data)
-            #file.mtime = int(time.time())
+            # file.mtime = int(time.time())
 
     @asyncio.coroutine
     def read(self, file, count=None):

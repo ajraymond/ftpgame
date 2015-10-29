@@ -8,23 +8,27 @@ import gameengine
 
 
 class FTPserverThread(threading.Thread):
-    def __init__(self, gameRoot, sock, host):
+    def __init__(self, game_root, sock, host):
         (conn, addr) = sock
         self.conn = conn
         self.addr = addr
-        self.rest = False
         self.pasv_mode = False
-        self.root = gameRoot
+        self.root = game_root
         self.cwd = self.root
         self.host = host
+        self.mode = 'A'
+        self.data_addr = None
+        self.data_port = None
+        self.servsock = None
+        self.datasock = None
         threading.Thread.__init__(self)
 
-    def _to_list_item(self, o):
+    @staticmethod
+    def _to_list_item(o):
         access = "---------" if o.is_locked else 'rwxrwxrwx'
-        d = o.type == gameengine.ItemType.room and 'd' or '-'
+        d = o.type == gameengine.ItemKind.room and 'd' or '-'
         ftime = time.strftime(' %b %d %H:%M ', time.localtime())
         return d + access + ' 1 user group ' + str(len(o.content)) + ' ' + ftime + o.name
-
 
     def run(self):
         self.write('220 Welcome!\r\n')
@@ -73,6 +77,7 @@ class FTPserverThread(threading.Thread):
         self.write('200 OK.\r\n')
 
     def ftp_type(self, cmd):
+        # TODO
         self.mode = cmd[5]
         self.write('200 Binary mode.\r\n')
 
@@ -95,7 +100,7 @@ class FTPserverThread(threading.Thread):
             base_url = self.cwd
             item = self.root.get_item_by_url(requested_dir, base_url)
 
-        if item is not None and item.type == gameengine.ItemType.room and not item.is_locked:
+        if item is not None and item.type == gameengine.ItemKind.room and not item.is_locked:
             self.write('250 OK.\r\n')
             self.cwd = item
         else:
@@ -178,9 +183,8 @@ class FTPserverThread(threading.Thread):
         self.write('451 Not implemented.\r\n')
 
     def ftp_rest(self, cmd):
-        self.pos = int(cmd[5:-2])
-        self.rest = True
-        self.write('250 File position reset.\r\n')
+        # TODO
+        self.write('451 Not implemented.\r\n')
 
     def ftp_retr(self, cmd):
         requested_url = cmd[5:-2]

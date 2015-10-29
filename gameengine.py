@@ -6,20 +6,20 @@ import uuid
 from enum import Enum
 
 
-class ItemType(Enum):
+class ItemKind(Enum):
     regular = 1
     room = 2
     npc = 3
 
 
 class GameItem(object):
-    def __init__(self, name, type=ItemType.regular, is_locked=False, content=None, watches=None,
+    def __init__(self, name, kind=ItemKind.regular, is_locked=False, content=None, watches=None,
                  message_stor=None, message_dele=None, message_retr=None):
         self._name = name
-        self.type = type
+        self.kind = kind
 
         self.parent = None
-        self.content = content or ([] if type == ItemType.room else "")
+        self.content = content or ([] if kind == ItemKind.room else "")
         if isinstance(content, list):
             for x in self.content:
                 x.parent = self
@@ -41,7 +41,7 @@ class GameItem(object):
         """
         Item name as displayed to players.
         """
-        return self._name + ("-locked" if self.is_locked and self.type == ItemType.room else "")
+        return self._name + ("-locked" if self.is_locked and self.kind == ItemKind.room else "")
 
     @name.setter
     def name(self, value):
@@ -135,7 +135,7 @@ class UniqueItem(GameItem):
 
 class Room(GameItem):
     def __init__(self, *args, **kwargs):
-        kwargs['type'] = ItemType.room
+        kwargs['kind'] = ItemKind.room
         super().__init__(*args, **kwargs)
 
 
@@ -150,6 +150,7 @@ class NPC(GameItem):
 class DarkRoom(Room):
     def __init__(self, is_lit=False, *args, **kwargs):
         self.is_lit = is_lit
+        self.real_content = []  # will get overridden by parent's constructor
         super(DarkRoom, self).__init__(*args, **kwargs)
 
     def add_child(self, item):
@@ -159,11 +160,11 @@ class DarkRoom(Room):
 
     @property
     def all_content(self):
-        return self._content
+        return self.real_content
 
     @property
     def content(self):
-        all_items = self._content
+        all_items = self.real_content
         if self.is_lit:
             return all_items
         else:
@@ -172,7 +173,7 @@ class DarkRoom(Room):
 
     @content.setter
     def content(self, new_content):
-        self._content = new_content
+        self.real_content = new_content
 
     def get_item(self, path_list):
         real_item = super(DarkRoom, self).get_item(path_list)
@@ -203,7 +204,7 @@ class ShinyItem(GameItem):
 
 class GameEngine(GameItem):
     def __init__(self):
-        GameItem.__init__(self, name="/", type=ItemType.room)
+        GameItem.__init__(self, name="/", kind=ItemKind.room)
         zippo = UniqueItem("zippo")
         self.add_child(Room(name="1", content=[
             Room(name="folder", content=[
@@ -258,9 +259,7 @@ class GameEngine(GameItem):
                                  lambda watchee: setattr(golden_castle_gate, 'is_locked', False))
 
         castle = Room("castle", is_locked=True,
-
                       message_stor="Is this a gift for me? Is this a letter at last?!")
-
 
         golden_castle_gate.add_child(castle)
         guard = GameItem("weak-guard",
@@ -279,7 +278,7 @@ class GameEngine(GameItem):
         forge.add_child(blacksmith)
         sword = UniqueItem(name="sword", message_retr="Here is a good, basic sword, my friend.")
         forge.add_watch(lambda watchee: UniqueItem.unique_item_in_folder(iron.content)(watchee) and
-                                        sword not in forge.content,  # otherwise, stuck in add_child -> notification loop
+                                        sword not in forge.content,  # otherwise stuck in add_child -> notification loop
                         lambda watchee: [[x.remove() for x in UniqueItem.unique_item_in_folder(iron.content)(watchee)],
                                          watchee.add_child(sword)])
 
@@ -288,7 +287,6 @@ class GameEngine(GameItem):
         castle.add_child(dragon)
         princess = NPC("Pissy-the-Princess", content="I'm afraid of the dragon!")
         castle.add_child(princess)
-
 
         def kill_dragon(watchee):
             [o.remove() for o in watchee.content if o.content == sword.content]
@@ -301,9 +299,7 @@ class GameEngine(GameItem):
                                                             "Nice. My bed is this way, you naughty knight!"),
                                                     setattr(princess, 'name', "Saucy-the-Sexy-Princess")])
 
-
         castle.add_watch(UniqueItem.unique_item_in_folder(sword.content), kill_dragon)
-
 
     def get_item_by_url(self, url, cwd):
         if url == '/':
@@ -315,7 +311,6 @@ class GameEngine(GameItem):
                 target = self
             m = re.findall('([^/]+)', url)
             return target.get_item(m)
-
 
     # for upload
     # returns tuple (targetFileName, targetLocation)
