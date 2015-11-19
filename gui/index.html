@@ -21,11 +21,11 @@
   <div class="container">
   <div class="row">
   
-  <div class="filePanel col-md-6">
+  <div class="filePanel col-md-6" id="dropzone">
     <h2>Local Storage</h2>
     <table class="table table-striped noselect">
       <thead>
-        <tr><th>#</th><th>Name</th></tr>
+        <tr><th>Name</th><th>Contents</th></tr>
       </thead>
       <tbody id="local">
       </tbody>
@@ -36,7 +36,7 @@
     <h2>Remote</h2>
     <table class="table table-striped noselect">
       <thead>
-        <tr><th>#</th><th>Name</th></tr>
+        <tr><th>Name</th><th>Type</th></tr>
       </thead>
       <tbody id="remote">
       </tbody>
@@ -48,17 +48,10 @@
 
 <script id="fileTemplate" type="text/x-jsrender">
 <tr>
-   <td>{{:id}}</td>
-   <td>{{:filename}}</td>
+   <td>{{:name}}</td>
+   <td>{{:contents}}</td>
 </tr>
 </script>
-
-    <footer class="footer">
-      <div class="container">
-        <p class="text-muted">Place sticky footer content here.</p>
-      </div>
-    </footer>
-
   
     <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
 
@@ -94,5 +87,6 @@
             console.log("List of files:", listFiles());
         });
     </script>
+    <script src="js/filereader.js"></script>
   </body>
 </html>
