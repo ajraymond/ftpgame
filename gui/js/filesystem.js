@@ -1,3 +1,12 @@
+var File = function(filename, contents) {
+  this.name = filename;
+  this.contents = contents;
+  this.type = 'file';
+}
+File.prototype.toString = function() {
+  return JSON.stringify({name: this.name, contents: this.contents, type: this.type});
+};
+
 var clearFilesystem = function() {
   localstorage.clear();
 }
@@ -27,7 +36,7 @@ var listFiles = function() {
   return filesystem;
 }
 
-var saveFile = function(filename, contents) {
+var addFile = function(filename, contents) {
   var filesystem = JSON.parse(localStorage.getItem("filesystem"));
 
   if (filesystem.indexOf(filename) == -1) {
@@ -42,7 +51,17 @@ var getFile = function(filename) {
   if (fileContents == null) {
     throw Error("File doesn't exist");
   }
-  return fileContents;
+  return new File(filename, fileContents);
+}
+
+var getAllFiles = function() {
+  var filesystem = JSON.parse(localStorage.getItem("filesystem"));
+  var allFiles = [];
+  filesystem.forEach(function(f) {
+    var fileContents = localStorage.getItem(f);
+    allFiles.push(new File(f, fileContents))
+  });
+  return allFiles;
 }
 
 initFilesystem();

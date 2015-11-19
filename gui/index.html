@@ -74,11 +74,14 @@
         $(document).ready(function() {
             console.log("List of files:", listFiles());
             console.log("Adding Foo.txt");
-            saveFile("Foo.txt", "This is the contents");
-            saveFile("Moo.txt", "This is the contents2");
+            addFile("Foo.txt", "This is the contents");
+            addFile("Moo.txt", "This is the contents2");
             console.log("List of files:", listFiles());
-            var contents = getFile("Foo.txt");
-            console.log("Contents of Foo.txt:", contents);
+            console.log("All files:", getAllFiles());
+            var thefile = getFile("Foo.txt");
+            console.log("Foo.txt object:", thefile.toString());
+            thefile = getFile("Moo.txt");
+            console.log("Moo.txt object:", thefile.toString());
             console.log("Deleting Foo.txt");
             deleteFile("Foo.txt")
             console.log("List of files:", listFiles());
