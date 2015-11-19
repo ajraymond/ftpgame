@@ -66,5 +66,30 @@
     <script src="js/bootstrap.min.js"></script>
     <script src="js/ftp.js"></script>
     <script src="js/jsrender.min.js"></script>
+    <script src="js/filesystem.js"></script>
+
+    
+    <!-- Sample tests for the filesystem -->
+    <script>
+        $(document).ready(function() {
+            console.log("List of files:", listFiles());
+            console.log("Adding Foo.txt");
+            saveFile("Foo.txt", "This is the contents");
+            saveFile("Moo.txt", "This is the contents2");
+            console.log("List of files:", listFiles());
+            var contents = getFile("Foo.txt");
+            console.log("Contents of Foo.txt:", contents);
+            console.log("Deleting Foo.txt");
+            deleteFile("Foo.txt")
+            console.log("List of files:", listFiles());
+            try {
+                console.log("Getting file Foo.txt again");
+                contents = getFile("Foo.txt");
+            } catch(e) {
+                console.log("Caught that... doesn't exist! Wheeh!");
+            }
+            console.log("List of files:", listFiles());
+        });
+    </script>
   </body>
 </html>
