@@ -7,6 +7,22 @@
     background-color: #9f9 !important;
 }
 
+tbody tr:hover {
+    background-color: #6c6 !important;
+}
+
+div.actions span.glyphicon:hover {
+  color: red;
+}
+
+div.actions {
+    visibility: hidden;
+}
+
+tr:hover div.actions {
+    visibility: visible;
+}
+
 .noselect {
     -webkit-touch-callout: none;
     -webkit-user-select: none;

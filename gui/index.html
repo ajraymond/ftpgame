@@ -18,40 +18,60 @@
   </head>
   <body>
   
-  <div class="container">
-  <div class="row">
+    <div class="container">
+      <div class="row">
+        <div class="filePanel col-md-6" id="dropzone">
+          <h2>Local Storage</h2>
+          <table class="table table-striped noselect">
+            <thead>
+              <tr><th>Name</th><th>Contents</th></tr>
+            </thead>
+            <tbody id="local">
+            </tbody>
+          </table>    
+        </div>
   
-  <div class="filePanel col-md-6" id="dropzone">
-    <h2>Local Storage</h2>
-    <table class="table table-striped noselect">
-      <thead>
-        <tr><th>Name</th><th>Contents</th></tr>
-      </thead>
-      <tbody id="local">
-      </tbody>
-    </table>    
-  </div>
-
-  <div class="filePanel remote col-md-6">
-    <h2>Remote</h2>
-    <table class="table table-striped noselect">
-      <thead>
-        <tr><th>Name</th><th>Type</th></tr>
-      </thead>
-      <tbody id="remote">
-      </tbody>
-    </table>    
-  </div>
+        <div class="filePanel remote col-md-6">
+          <h2>Remote</h2>
+          <table class="table table-striped noselect">
+            <thead>
+              <tr><th>Name</th><th>Type</th><th>&nbsp;</th></tr>
+            </thead>
+            <tbody id="remote">
+            </tbody>
+          </table>    
+        </div>
+      </div>
+    </div>
   
-  </div>
-  </div>
+    <!-- Modal dialog -->
+    <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title" id="myModalLabel">File Viewer</h4>
+          </div>
+          <div class="modal-body">
+          <textarea id="modalcontents"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-primary">Save changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- End of Modal dialog -->
 
-<script id="fileTemplate" type="text/x-jsrender">
-<tr>
-   <td>{{:name}}</td>
-   <td>{{:contents}}</td>
-</tr>
-</script>
+
+    <script id="fileTemplate" type="text/x-jsrender">
+    <tr>
+       <td>{{:name}}</td>
+       <td>{{:contents}}</td>
+       <td><div class="actions"><a href="#" class="deleteaction"><span class="glyphicon glyphicon-trash"></span></a></div></td>
+    </tr>
+    </script>
   
     <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
 
@@ -60,33 +80,6 @@
     <script src="js/ftp.js"></script>
     <script src="js/jsrender.min.js"></script>
     <script src="js/filesystem.js"></script>
-
-    
-    <!-- Sample tests for the filesystem -->
-    <script>
-        $(document).ready(function() {
-            console.log("List of files:", listFiles());
-            console.log("Adding Foo.txt");
-            addFile("Foo.txt", "This is the contents");
-            addFile("Moo.txt", "This is the contents2");
-            console.log("List of files:", listFiles());
-            console.log("All files:", getAllFiles());
-            var thefile = getFile("Foo.txt");
-            console.log("Foo.txt object:", thefile.toString());
-            thefile = getFile("Moo.txt");
-            console.log("Moo.txt object:", thefile.toString());
-            console.log("Deleting Foo.txt");
-            deleteFile("Foo.txt")
-            console.log("List of files:", listFiles());
-            try {
-                console.log("Getting file Foo.txt again");
-                contents = getFile("Foo.txt");
-            } catch(e) {
-                console.log("Caught that... doesn't exist! Wheeh!");
-            }
-            console.log("List of files:", listFiles());
-        });
-    </script>
     <script src="js/filereader.js"></script>
   </body>
 </html>
