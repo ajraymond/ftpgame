@@ -39,6 +39,19 @@ $(document).ready(function(){
       alert("Clicked on row " + $(this).closest("tbody").children("tr").index($(this).closest("tr")));
     });
 
+    $('.container').contextmenu({
+      target: '#context-menu',
+      before: function (e) {
+        e.preventDefault();
+        if (e.target.tagName != 'TD') {
+          this.closemenu();
+          return false;
+        }
+        return true;
+      }
+    });
+
+
     //filesystem tests
     console.log("List of files:", listFiles());
     console.log("Adding Foo.txt");

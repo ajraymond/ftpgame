@@ -21,6 +21,7 @@
   "dependencies": {
     "jquery": "~2.1.4",
     "bootstrap": "~3.3.5",
-    "jsrender": "~1.0.0-rc.70"
+    "jsrender": "~1.0.0-rc.70",
+    "bootstrap-contextmenu": "~0.3.3"
   }
 }

@@ -17,8 +17,8 @@
     <![endif]-->
   </head>
   <body>
-  
-    <div class="container">
+ 
+    <div class="container" data-toggle="context">
       <div class="row">
         <div class="filePanel col-md-6" id="dropzone">
           <h2>Local Storage</h2>
@@ -64,6 +64,15 @@
     </div>
     <!-- End of Modal dialog -->
 
+        <div data-toggle="context" data-target="#context-menu" style="height:300px;width:650px;border:1px solid #ddd">
+        </div>
+
+        <div id="context-menu">
+          <ul class="dropdown-menu" role="menu">
+            <li><a tabindex="-1">Delete</a></li>
+            <li><a tabindex="-1">View</a></li>
+          </ul>
+        </div>
 
     <script id="fileTemplate" type="text/x-jsrender">
     <tr>
@@ -77,6 +86,7 @@
     <!-- Include all compiled plugins (below), or include individual files as needed -->
     <script src="bower_components/jquery/dist/jquery.min.js"></script>
     <script src="bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+    <script src="bower_components/bootstrap-contextmenu/bootstrap-contextmenu.js"></script>
     <script src="bower_components/jsrender/jsrender.min.js"></script>
 
     <script src="js/ftp.js"></script>
