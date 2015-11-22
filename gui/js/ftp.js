@@ -50,29 +50,5 @@ $(document).ready(function(){
         return true;
       }
     });
-
-
-    //filesystem tests
-    console.log("List of files:", listFiles());
-    console.log("Adding Foo.txt");
-    addFile("Foo.txt", "This is the contents");
-    addFile("Moo.txt", "This is the contents2");
-    console.log("List of files:", listFiles());
-    console.log("All files:", getAllFiles());
-    var thefile = getFile("Foo.txt");
-    console.log("Foo.txt object:", thefile.toString());
-    thefile = getFile("Moo.txt");
-    console.log("Moo.txt object:", thefile.toString());
-    console.log("Deleting Foo.txt");
-    deleteFile("Foo.txt")
-    console.log("List of files:", listFiles());
-    try {
-     console.log("Getting file Foo.txt again");
-     contents = getFile("Foo.txt");
-    } catch(e) {
-      console.log("Caught that... doesn't exist! Wheeh!");
-    }
-    console.log("List of files:", listFiles());
 });
-
 

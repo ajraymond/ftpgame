@@ -8,7 +8,7 @@ File.prototype.toString = function() {
 };
 
 var clearFilesystem = function() {
-  localstorage.clear();
+  localStorage.clear();
 }
 
 var initFilesystem = function() {
