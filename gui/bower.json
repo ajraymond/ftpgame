@@ -1,0 +1,26 @@
+{
+  "name": "ftpgame",
+  "homepage": "https://github.com/ajraymond/ftpgame",
+  "authors": [
+    "Alexandre J. Raymond <alexandre.j.raymond@gmail.com>",
+    "Eric Demers <eric.demers@gmail.com>"
+  ],
+  "description": "Browser-based FTP-style adventure game",
+  "main": "index.html",
+  "moduleType": [],
+  "keywords": [],
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "jquery": "~2.1.4",
+    "bootstrap": "~3.3.5",
+    "jsrender": "~1.0.0-rc.70"
+  }
+}
