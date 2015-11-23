@@ -2,7 +2,7 @@ var File = function(filename, contents) {
   this.name = filename;
   this.contents = contents;
   this.type = 'file';
-}
+};
 
 File.prototype.toString = function() {
   return JSON.stringify({name: this.name, contents: this.contents, type: this.type});
@@ -13,15 +13,13 @@ File.prototype.toString = function() {
 var Filesystem = function(prefix) {
   this.prefix = prefix?prefix:"";
 
-  if (localStorage.getItem(this._getFsName()) == null) {
+  if (localStorage.getItem(this._getFsName()) === null) {
     localStorage.setItem(this._getFsName(), JSON.stringify([]));
   }
 };
 
 Filesystem.prototype._getFsName = function(name) {
-  var n = "filesystem"
-        + (this.prefix?("_"+this.prefix):"")
-        + (name?("_"+name):"");
+  var n = "filesystem" + (this.prefix?("_"+this.prefix):"") + (name?("_"+name):"");
   return n;
 };
 
@@ -56,7 +54,7 @@ Filesystem.prototype.addFile = function(filename, contents) {
 
 Filesystem.prototype.getFile = function(filename) {
   var fileContents = localStorage.getItem(this._getFsName(filename));
-  if (fileContents == null) {
+  if (fileContents === null) {
     throw Error("File doesn't exist");
   }
   return new File(filename, fileContents);

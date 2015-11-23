@@ -1,0 +1,4 @@
+Setup development environment
+============================
+$ gulp install
+$ npm install
