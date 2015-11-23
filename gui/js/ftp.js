@@ -5,11 +5,6 @@ $(document).ready(function(){
     var template = $.templates("#fileTemplate");
     $("#local").html(template.render(fs.getAllFiles()));
     $("#remote").html(template.render(remoteData));
-
-    $('tr:not(:has(th))').click(function() {
-      $(this).closest("tr").siblings().removeClass("highlighted");
-      $(this).toggleClass("highlighted");
-    });
   }
 
   var remoteData = [];

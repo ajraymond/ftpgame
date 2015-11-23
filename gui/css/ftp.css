@@ -1,37 +1,33 @@
 .filePanel {
-    height: 100vh;
-    overflow: auto;
+  height: 100vh;
+  overflow: auto;
 }
 
-.highlighted {
-    background-color: #9f9 !important;
+tbody > tr:hover {
+  background-color: #6c6 !important;
 }
 
-tbody tr:hover {
-    background-color: #6c6 !important;
-}
-
-div.actions span.glyphicon:hover {
+div.actions .glyphicon:hover {
   color: red;
 }
 
 div.actions {
-    visibility: hidden;
+  visibility: hidden;
 }
 
 tr:hover div.actions {
-    visibility: visible;
+  visibility: visible;
 }
 
 .noselect {
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -khtml-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .bilboDraggins {
-    border: solid 3px #050;
+  border: solid 3px #050;
 }
